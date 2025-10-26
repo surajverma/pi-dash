@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   let refreshIntervalId = null;
   let appConfig = null;
-  let lastDomainsSeen = {}; 
+  const lastCursorByPihole = {};
 
   async function fetchData(url) {
     const response = await fetch(url);
@@ -117,8 +117,8 @@ document.addEventListener('DOMContentLoaded', () => {
   async function refreshDashboard() {
     try {
       
-      const includeQueries = appConfig && appConfig.show_queries;
-      const endpoint = includeQueries ? 'data?include_queries=true&length=30' : 'data';
+  const includeQueries = appConfig && appConfig.show_queries;
+  const endpoint = includeQueries ? 'data?include_queries=true&length=50' : 'data';
       const data = await fetchData(endpoint);
       
       
@@ -157,49 +157,85 @@ document.addEventListener('DOMContentLoaded', () => {
     const isDark = document.documentElement.classList.contains('dark');
     container.classList.toggle('dark-mode', isDark);
 
-    const additions = [];
-    Object.entries(allQueries).forEach(([piholeName, queries]) => {
-      if (!Array.isArray(queries)) return;
-      const seenSet = lastDomainsSeen[piholeName] || new Set();
-      for (let i = queries.length - 1; i >= 0; i--) { // oldest first
+    const newItems = [];
+    for (const [piholeName, queries] of Object.entries(allQueries)) {
+      if (!Array.isArray(queries) || queries.length === 0) continue;
+      const lastCursor = lastCursorByPihole[piholeName] ?? -Infinity;
+      let maxCursor = lastCursor;
+      for (let i = 0; i < queries.length; i++) {
         const q = queries[i];
-        const key = q.timestamp + ':' + q.domain + (q.blocked ? ':b' : ':a');
-        if (seenSet.has(key)) continue;
-        seenSet.add(key);
-        // prune seenSet
-        if (seenSet.size > 1000) {
-          const first = seenSet.values().next().value;
-          seenSet.delete(first);
+        const id = (q.id !== undefined && q.id !== null) ? Number(q.id) : null;
+        const timeVal = (q.time !== undefined && q.time !== null) ? Number(q.time) : (q.timestamp ? Number(q.timestamp) : null);
+        const cursor = (id !== null) ? id : (timeVal !== null ? timeVal : -Infinity);
+        if (cursor > lastCursor) {
+          newItems.push({ piholeName, ...q, __cursor: cursor });
         }
-        additions.push({ piholeName, ...q });
+        if (cursor > maxCursor) maxCursor = cursor;
       }
-      lastDomainsSeen[piholeName] = seenSet;
-    });
+      lastCursorByPihole[piholeName] = maxCursor;
+    }
+
+    if (newItems.length === 0) return; 
+
+    
+    newItems.sort((a, b) => a.__cursor - b.__cursor);
+
+    const groups = [];
+    for (let i = 0; i < newItems.length; i++) {
+      const item = newItems[i];
+      const domain = item.domain || '';
+      const piholeName = item.piholeName || '';
+      const label = `[${piholeName}] ${domain}`;
+      const blocked = !!item.blocked;
+      if (groups.length > 0 && groups[groups.length - 1].label === label) {
+        const g = groups[groups.length - 1];
+        g.count += 1;
+        g.blocked = g.blocked || blocked;
+      } else {
+        groups.push({ label, domain, piholeName, blocked, count: 1 });
+      }
+    }
 
     const MAX_ROWS = 100;
-    additions.forEach((row, index) => {
-      const li = document.createElement('li');
-      li.className = 'opacity-0 translate-y-1 text-[10px] leading-tight px-1 whitespace-nowrap';
-      li.style.textOverflow = 'ellipsis';
-      li.textContent = `[${row.piholeName}] ${row.domain}`;
-      if (row.blocked) {
-        li.classList.add('text-red-600', 'dark:text-red-500');
-        li.style.filter = 'drop-shadow(0 0 2px rgba(220, 38, 38, 0.3))';
+    for (let index = 0; index < groups.length; index++) {
+      const group = groups[index];
+      const lastLi = container.lastElementChild;
+      if (lastLi && lastLi.dataset && lastLi.dataset.label === group.label) {
+        const prev = Number(lastLi.dataset.count || '1');
+        const nextCount = prev + group.count;
+        lastLi.dataset.count = String(nextCount);
+        lastLi.textContent = `${group.label} (x${nextCount})`;
+        if (group.blocked) {
+          lastLi.classList.remove('text-green-600', 'dark:text-green-500');
+          lastLi.classList.add('text-red-600', 'dark:text-red-500');
+          lastLi.style.filter = 'drop-shadow(0 0 2px rgba(220, 38, 38, 0.3))';
+        }
       } else {
-        li.classList.add('text-green-600', 'dark:text-green-500');
-        li.style.filter = 'drop-shadow(0 0 2px rgba(22, 163, 74, 0.25))';
+        const li = document.createElement('li');
+        li.className = 'opacity-0 translate-y-1 text-[10px] leading-tight px-1 whitespace-nowrap';
+        li.style.textOverflow = 'ellipsis';
+        li.dataset.label = group.label;
+        li.dataset.count = String(group.count);
+        li.textContent = group.count > 1 ? `${group.label} (x${group.count})` : group.label;
+        if (group.blocked) {
+          li.classList.add('text-red-600', 'dark:text-red-500');
+          li.style.filter = 'drop-shadow(0 0 2px rgba(220, 38, 38, 0.3))';
+        } else {
+          li.classList.add('text-green-600', 'dark:text-green-500');
+          li.style.filter = 'drop-shadow(0 0 2px rgba(22, 163, 74, 0.25))';
+        }
+        const delay = Math.min(index * 15, 300);
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            li.style.transition = 'opacity .3s ease, transform .3s ease';
+            li.style.opacity = '0.9';
+            li.style.transform = 'translateY(0)';
+          });
+        }, delay);
+        container.appendChild(li);
       }
-      const delay = Math.min(index * 15, 300); 
-      setTimeout(() => {
-        requestAnimationFrame(() => {
-          li.style.transition = 'opacity .3s ease, transform .3s ease';
-          li.style.opacity = '0.9';
-          li.style.transform = 'translateY(0)';
-        });
-      }, delay);
-      container.appendChild(li);
-    });
-    // Cleanup: keep only MAX_ROWS most recent
+    }
+
     while (container.children.length > MAX_ROWS) {
       container.removeChild(container.firstChild);
     }
