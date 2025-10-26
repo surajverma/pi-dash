@@ -8,6 +8,13 @@ import concurrent.futures
 
 # Constants
 NO_PASSWORD = "NO_PASSWORD"
+# Define blocked status codes according to Pi-hole API documentation
+BLOCKED_STATUSES = {
+    'GRAVITY', 'REGEX', 'DENYLIST', 
+    'EXTERNAL_BLOCKED_IP', 'EXTERNAL_BLOCKED_NULL', 'EXTERNAL_BLOCKED_NXRA',
+    'GRAVITY_CNAME', 'REGEX_CNAME', 'DENYLIST_CNAME',
+    'DBBUSY', 'SPECIAL_DOMAIN', 'EXTERNAL_BLOCKED_EDE15'
+}
 
 app = Flask(__name__)
 CORS(app)
@@ -217,29 +224,25 @@ def fetch_recent_queries(length=50):
                 r = requests.get(url, headers=headers, timeout=10, verify=False)
             r.raise_for_status()
             data = r.json()
-            
-            # Define blocked status codes according to Pi-hole API documentation
-            BLOCKED_STATUSES = {
-                'GRAVITY', 'REGEX', 'DENYLIST', 
-                'EXTERNAL_BLOCKED_IP', 'EXTERNAL_BLOCKED_NULL', 'EXTERNAL_BLOCKED_NXRA',
-                'GRAVITY_CNAME', 'REGEX_CNAME', 'DENYLIST_CNAME',
-                'DBBUSY', 'SPECIAL_DOMAIN', 'EXTERNAL_BLOCKED_EDE15'
-            }
+        
             
             normalized = []
             for q in data.get('queries', [])[:length]:
                 domain = q.get('domain', '')
                 status = (q.get('status') or '').upper()
-                ts = q.get('timestamp')
+                ts = q.get('time') or q.get('timestamp')
                 upstream = q.get('upstream', '')
+                qid = q.get('id')
                 
                 # Check if status matches any blocked status
                 blocked = status in BLOCKED_STATUSES
                 
                 normalized.append({
+                    'id': qid,
                     'domain': domain,
                     'blocked': blocked,
-                    'timestamp': ts,
+                    'time': ts,
+                    'timestamp': ts,  # legacy compatibility
                     'upstream': upstream
                 })
             return name, normalized
@@ -274,7 +277,7 @@ def data():
         
         include_queries = request.args.get('include_queries', 'false').lower() == 'true'
         if include_queries:
-            length = int(request.args.get('length', 30))
+            length = int(request.args.get('length', 50))
             length = max(1, min(length, 200))
             queries_data = fetch_recent_queries(length=length)
             return jsonify({

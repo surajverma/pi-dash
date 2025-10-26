@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-dashboard-cache-v1';
+const CACHE_NAME = 'pi-dashboard-cache-v0.5.8';
 const urlsToCache = [
   '{{CACHE_URL}}',
 ];
