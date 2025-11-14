@@ -198,6 +198,15 @@ def fetch_recent_queries(length=50):
     """
     enabled_piholes = [p for p in config['piholes'] if p.get('enabled', True)]
     results = {}
+    
+    # Extract all Pi-hole hostnames to filter cross-Pi-hole queries
+    from urllib.parse import urlparse
+    pihole_hostnames = set()
+    for p in enabled_piholes:
+        parsed = urlparse(p['address'])
+        hostname = parsed.hostname or parsed.netloc.split(':')[0] if parsed.netloc else None
+        if hostname:
+            pihole_hostnames.add(hostname.lower())
 
     def fetch_queries_for_pihole(pihole_config):
         name = pihole_config['name']
@@ -224,27 +233,33 @@ def fetch_recent_queries(length=50):
                 r = requests.get(url, headers=headers, timeout=10, verify=False)
             r.raise_for_status()
             data = r.json()
-        
             
             normalized = []
+            filtered_count = 0
             for q in data.get('queries', [])[:length]:
-                domain = q.get('domain', '')
+                original_domain = q.get('domain', '')
+                domain = original_domain.lower().strip()
                 status = (q.get('status') or '').upper()
                 ts = q.get('time') or q.get('timestamp')
                 upstream = q.get('upstream', '')
                 qid = q.get('id')
+                
+                # Skip queries to ANY Pi-hole hostname (not just this one)
+                if domain in pihole_hostnames:
+                    continue
                 
                 # Check if status matches any blocked status
                 blocked = status in BLOCKED_STATUSES
                 
                 normalized.append({
                     'id': qid,
-                    'domain': domain,
+                    'domain': original_domain,  # preserve original casing for display
                     'blocked': blocked,
                     'time': ts,
                     'timestamp': ts,  # legacy compatibility
                     'upstream': upstream
                 })
+            
             return name, normalized
         except requests.exceptions.RequestException:
             return name, []
