@@ -1,6 +1,8 @@
-const CACHE_NAME = 'pi-dashboard-cache-v0.5.9';
+const CACHE_NAME = 'pi-dashboard-cache-v0.6.0';
 const urlsToCache = [
   '{{CACHE_URL}}',
+  '{{CACHE_URL}}css/style.css',
+  '{{CACHE_URL}}js/app.js',
 ];
 
 self.addEventListener('install', event => {

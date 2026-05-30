@@ -1,6 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   let refreshIntervalId = null;
+  let stalenessIntervalId = null;
   let appConfig = null;
+  let isFetching = false;
+  let lastUpdateTime = null;
+  let queryFeedPaused = false;
   const lastCursorByPihole = {};
 
   async function fetchData(url) {
@@ -109,12 +113,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateTimestamp() {
+    lastUpdateTime = Date.now();
     const timestampEl = document.getElementById('last-updated');
     const now = new Date();
     timestampEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+    timestampEl.classList.remove('text-yellow-600', 'dark:text-yellow-500');
+    timestampEl.classList.add('text-gray-500', 'dark:text-gray-400');
+  }
+
+  function updateStalenessIndicator() {
+    if (!lastUpdateTime || !appConfig) return;
+    const timestampEl = document.getElementById('last-updated');
+    if (!timestampEl) return;
+    const elapsed = Date.now() - lastUpdateTime;
+    const threshold = (appConfig.refresh_interval || 5000) * 2;
+    if (elapsed > threshold) {
+      timestampEl.classList.add('text-yellow-600', 'dark:text-yellow-500');
+      timestampEl.classList.remove('text-gray-500', 'dark:text-gray-400');
+    }
   }
 
   async function refreshDashboard() {
+    if (isFetching) return;
+    isFetching = true;
     try {
       
   const includeQueries = appConfig && appConfig.show_queries;
@@ -137,6 +158,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (error) {
       console.error('Failed to refresh dashboard:', error);
+    } finally {
+      isFetching = false;
     }
   }
 
@@ -144,11 +167,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (refreshIntervalId || !appConfig) return;
     const interval = appConfig.refresh_interval || 5000;
     refreshIntervalId = setInterval(refreshDashboard, interval);
+    stalenessIntervalId = setInterval(updateStalenessIndicator, 1000);
   }
 
   function stopTimer() {
     clearInterval(refreshIntervalId);
     refreshIntervalId = null;
+    clearInterval(stalenessIntervalId);
+    stalenessIntervalId = null;
   }
 
   function renderQueries(allQueries) {
@@ -175,9 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
       lastCursorByPihole[piholeName] = maxCursor;
     }
 
-    if (newItems.length === 0) return; 
+    if (newItems.length === 0) return;
+    if (queryFeedPaused) return;
 
-    
     newItems.sort((a, b) => a.__cursor - b.__cursor);
 
     const groups = [];
@@ -306,6 +332,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       updateTimestamp();
 
+      if (initData.queries) {
+        renderQueries(initData.queries);
+      }
+
       startTimer();
     } catch (error) {
       console.error('Failed to initialize dashboard:', error);
@@ -316,9 +346,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.hidden) {
       stopTimer();
     } else {
+      refreshDashboard();
       startTimer();
     }
   });
+
+  window.addEventListener('offline', () => stopTimer());
+  window.addEventListener('online', () => { refreshDashboard(); startTimer(); });
+
+  const queriesContainer = document.getElementById('background-queries');
+  if (queriesContainer) {
+    queriesContainer.addEventListener('mouseenter', () => { queryFeedPaused = true; });
+    queriesContainer.addEventListener('mouseleave', () => { queryFeedPaused = false; });
+  }
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
