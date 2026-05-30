@@ -5,6 +5,8 @@ from flask_cors import CORS
 import os
 import json
 import concurrent.futures
+import threading
+from urllib.parse import urlparse
 
 # Constants
 NO_PASSWORD = "NO_PASSWORD"
@@ -47,6 +49,7 @@ if not html_base.endswith('/'):
 
 bp = Blueprint('pi-dash', __name__)
 pihole_sessions = {}
+_sessions_lock = threading.Lock()
 
 
 def authenticate_and_get_sid(address, password):
@@ -153,22 +156,27 @@ def fetch_all_pihole_data():
         password = pihole_config['password']
         
         
-        sid = pihole_sessions.get(name)
+        with _sessions_lock:
+            sid = pihole_sessions.get(name)
         if not sid:
             sid = authenticate_and_get_sid(address, password)
             if not sid:
                 return name, {"error": f"Authentication failed for Pi-hole '{name}'"}
-            pihole_sessions[name] = sid
+            with _sessions_lock:
+                pihole_sessions[name] = sid
         
         try:
             response = get_pihole_data(address, sid)
             if response.status_code == 401 and sid != NO_PASSWORD:
                 
                 print(f"SID for Pi-hole '{name}' expired. Re-authenticating...")
+                with _sessions_lock:
+                    pihole_sessions.pop(name, None)
                 sid = authenticate_and_get_sid(address, password)
                 if not sid:
                     return name, {"error": f"Re-authentication failed for Pi-hole '{name}'"}
-                pihole_sessions[name] = sid
+                with _sessions_lock:
+                    pihole_sessions[name] = sid
                 response = get_pihole_data(address, sid)
             
             response.raise_for_status()
@@ -200,7 +208,6 @@ def fetch_recent_queries(length=50):
     results = {}
     
     # Extract all Pi-hole hostnames to filter cross-Pi-hole queries
-    from urllib.parse import urlparse
     pihole_hostnames = set()
     for p in enabled_piholes:
         parsed = urlparse(p['address'])
@@ -213,29 +220,33 @@ def fetch_recent_queries(length=50):
         address = pihole_config['address']
         password = pihole_config['password']
 
-        sid = pihole_sessions.get(name)
+        with _sessions_lock:
+            sid = pihole_sessions.get(name)
         if not sid:
             sid = authenticate_and_get_sid(address, password)
             if not sid:
                 return name, []
-            pihole_sessions[name] = sid
+            with _sessions_lock:
+                pihole_sessions[name] = sid
         headers = {} if sid == NO_PASSWORD else {'X-FTL-SID': sid}
         url = f"{address}/api/queries?length={length}"
         try:
             r = requests.get(url, headers=headers, timeout=10, verify=False)
             if r.status_code == 401 and sid != NO_PASSWORD:
                 # attempt re-auth
+                with _sessions_lock:
+                    pihole_sessions.pop(name, None)
                 sid = authenticate_and_get_sid(address, password)
                 if not sid:
                     return name, []
-                pihole_sessions[name] = sid
+                with _sessions_lock:
+                    pihole_sessions[name] = sid
                 headers = {} if sid == NO_PASSWORD else {'X-FTL-SID': sid}
                 r = requests.get(url, headers=headers, timeout=10, verify=False)
             r.raise_for_status()
             data = r.json()
             
             normalized = []
-            filtered_count = 0
             for q in data.get('queries', [])[:length]:
                 original_domain = q.get('domain', '')
                 domain = original_domain.lower().strip()
@@ -276,11 +287,13 @@ def init():
     try:
         filtered_config = get_filtered_config()
         pihole_data = fetch_all_pihole_data()
-        
-        return jsonify({
+        response_data = {
             "config": filtered_config,
             "data": pihole_data
-        })
+        }
+        if config.get("show_queries", False):
+            response_data["queries"] = fetch_recent_queries(length=50)
+        return jsonify(response_data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
