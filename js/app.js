@@ -184,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     container.classList.toggle('dark-mode', isDark);
 
     const newItems = [];
+    const pendingCursors = {};
     for (const [piholeName, queries] of Object.entries(allQueries)) {
       if (!Array.isArray(queries) || queries.length === 0) continue;
       const lastCursor = lastCursorByPihole[piholeName] ?? -Infinity;
@@ -198,11 +199,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (cursor > maxCursor) maxCursor = cursor;
       }
-      lastCursorByPihole[piholeName] = maxCursor;
+      pendingCursors[piholeName] = maxCursor;
     }
 
     if (newItems.length === 0) return;
     if (queryFeedPaused) return;
+
+    // Commit cursor advances only now that we know we will render
+    Object.assign(lastCursorByPihole, pendingCursors);
 
     newItems.sort((a, b) => a.__cursor - b.__cursor);
 
