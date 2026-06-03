@@ -8,6 +8,7 @@ import concurrent.futures
 import threading
 from urllib.parse import urlparse
 import urllib3
+import warnings
 
 # Constants
 NO_PASSWORD = "NO_PASSWORD"
@@ -79,19 +80,24 @@ def _is_certificate_verification_error(error):
 
 
 def request_pihole(method, url, **kwargs):
+    request_kwargs = dict(kwargs)
+    request_kwargs.setdefault('timeout', 10)
+    request_kwargs.pop('verify', None)
+
     parsed_url = urlparse(url)
     if parsed_url.scheme != 'https':
-        return requests.request(method, url, timeout=10, **kwargs)
+        return requests.request(method, url, **request_kwargs)
 
     try:
-        return requests.request(method, url, timeout=10, verify=True, **kwargs)
+        return requests.request(method, url, verify=True, **request_kwargs)
     except requests.exceptions.SSLError as exc:
         if not _is_certificate_verification_error(exc):
             raise
 
         _warn_insecure_tls_once(url)
-        with urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning):
-            return requests.request(method, url, timeout=10, verify=False, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', urllib3.exceptions.InsecureRequestWarning)
+            return requests.request(method, url, verify=False, **request_kwargs)
 
 
 def authenticate_and_get_sid(address, password):
