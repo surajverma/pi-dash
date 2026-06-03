@@ -7,6 +7,7 @@ import json
 import concurrent.futures
 import threading
 from urllib.parse import urlparse
+import urllib3
 
 # Constants
 NO_PASSWORD = "NO_PASSWORD"
@@ -50,13 +51,54 @@ if not html_base.endswith('/'):
 bp = Blueprint('pi-dash', __name__)
 pihole_sessions = {}
 _sessions_lock = threading.Lock()
+_tls_warning_hosts = set()
+_tls_warning_lock = threading.Lock()
+
+
+def _warn_insecure_tls_once(address):
+    hostname = urlparse(address).hostname or address
+    with _tls_warning_lock:
+        if hostname in _tls_warning_hosts:
+            return
+        _tls_warning_hosts.add(hostname)
+    print(
+        f"Warning: TLS certificate verification failed for {hostname}. "
+        "Falling back to an unverified HTTPS request. "
+        "Use a publicly trusted or locally trusted certificate to remove this warning."
+    )
+
+
+def _is_certificate_verification_error(error):
+    message = str(error).lower()
+    return (
+        'certificate verify failed' in message
+        or 'self-signed certificate' in message
+        or 'hostname mismatch' in message
+        or 'unable to get local issuer certificate' in message
+    )
+
+
+def request_pihole(method, url, **kwargs):
+    parsed_url = urlparse(url)
+    if parsed_url.scheme != 'https':
+        return requests.request(method, url, timeout=10, **kwargs)
+
+    try:
+        return requests.request(method, url, timeout=10, verify=True, **kwargs)
+    except requests.exceptions.SSLError as exc:
+        if not _is_certificate_verification_error(exc):
+            raise
+
+        _warn_insecure_tls_once(url)
+        with urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning):
+            return requests.request(method, url, timeout=10, verify=False, **kwargs)
 
 
 def authenticate_and_get_sid(address, password):
     auth_url = f"{address}/api/auth"
     payload = {"password": password}
     try:
-        response = requests.post(auth_url, json=payload, timeout=10, verify=False)
+        response = request_pihole('post', auth_url, json=payload)
         if response.status_code == 200:
             data = response.json()
             new_sid = data.get("session", {}).get("sid")            
@@ -144,7 +186,7 @@ def get_filtered_config():
 def get_pihole_data(address, sid):
     url = f"{address}/api/stats/summary"
     headers = {} if sid == NO_PASSWORD else {'X-FTL-SID': sid}
-    return requests.get(url, headers=headers, timeout=10, verify=False)
+    return request_pihole('get', url, headers=headers)
 
 def fetch_all_pihole_data():
     enabled_piholes = [p for p in config['piholes'] if p.get('enabled', True)]
@@ -231,7 +273,7 @@ def fetch_recent_queries(length=50):
         headers = {} if sid == NO_PASSWORD else {'X-FTL-SID': sid}
         url = f"{address}/api/queries?length={length}"
         try:
-            r = requests.get(url, headers=headers, timeout=10, verify=False)
+            r = request_pihole('get', url, headers=headers)
             if r.status_code == 401 and sid != NO_PASSWORD:
                 # attempt re-auth
                 with _sessions_lock:
@@ -242,7 +284,7 @@ def fetch_recent_queries(length=50):
                 with _sessions_lock:
                     pihole_sessions[name] = sid
                 headers = {} if sid == NO_PASSWORD else {'X-FTL-SID': sid}
-                r = requests.get(url, headers=headers, timeout=10, verify=False)
+                r = request_pihole('get', url, headers=headers)
             r.raise_for_status()
             data = r.json()
             
