@@ -1,59 +1,343 @@
 document.addEventListener('DOMContentLoaded', () => {
-  let statsTimer = null, queriesTimer = null, stalenessTimer = null;
-  let appConfig = null, statsFetching = false, queriesFetching = false, lastUpdateTime = null, queryFeedPaused = false;
-  const lastCursorByPihole = {}, trendHistory = {}, MAX_TREND_POINTS = 30;
+  'use strict';
+  const core = window.PiDashCore;
+  if (!core) throw new Error('Pi-Dash core is missing');
 
-  async function fetchData(url) {
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return response.json();
+  const MAX_ROWS = 100;
+  const MAX_PENDING = 1000;
+  const MAX_TREND_POINTS = 30;
+  const metrics = [
+    ['total', 'Total Queries', 'text-blue-500'],
+    ['blocked', 'Queries Blocked', 'text-red-500'],
+    ['percentage', 'Percent Blocked', 'text-yellow-600 dark:text-yellow-500'],
+    ['cache', 'Cached / Forwarded', 'text-indigo-500'],
+    ['unique', 'Unique Domains', 'text-orange-500'],
+    ['clients', 'Active Clients', 'text-purple-500'],
+    ['domains', 'Domains on Lists', 'text-green-600 dark:text-green-500'],
+  ];
+  const cards = new Map();
+  const trendHistory = new Map();
+  const queryTracker = core.createQueryTracker();
+  const queryRows = [];
+  let pendingQueries = [];
+  let appConfig = null;
+  let statsTimer = null, queriesTimer = null, stalenessTimer = null;
+  let statsController = null, queriesController = null, initController = null;
+  let statsFetching = false, queriesFetching = false;
+  let lastUpdateTime = null, queryFeedPaused = false;
+  let foregroundGeneration = 0;
+
+  const main = document.querySelector('main');
+  const network = document.getElementById('network-summary');
+  const queryContainer = document.getElementById('background-queries');
+  const queryPanel = document.getElementById('query-panel');
+  const queryToggle = document.getElementById('query-toggle');
+  const pauseButton = document.getElementById('query-pause');
+  const timestamp = document.getElementById('last-updated');
+  const number = value => core.summaryStats({ queries: { total: value } }).total.toLocaleString();
+
+  function visible() {
+    return !document.hidden && navigator.onLine !== false;
   }
-  function escapeHtml(value) { return String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
-  function summaryStats(raw) {
-    if (!raw || !raw.queries) return { total:0,blocked:0,percentage:0,clients:0,rate:0,cached:0,forwarded:0,unique:0,domains:0 };
-    const q=raw.queries||{}, clients=raw.clients||{}, gravity=raw.gravity||{};
-    return { total:Number(q.total)||0, blocked:Number(q.blocked)||0, percentage:Number(q.percent_blocked)||0, clients:Number(clients.active)||0, rate:Number(q.frequency)||0, cached:Number(q.cached)||0, forwarded:Number(q.forwarded)||0, unique:Number(q.unique_domains)||0, domains:Number(gravity.domains_being_blocked)||0 };
+
+  async function fetchData(url, signal) {
+    const response = await fetch(url, { cache: 'no-store', signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (data?.error) throw new Error(data.error);
+    return data;
   }
-  function healthPresentation(meta={}, hasError=false) {
-    if (hasError || meta.health==='unreachable' || meta.health==='auth_error') return {dot:'bg-red-500',text:meta.health==='auth_error'?'Auth failed':'Offline',textClass:'text-red-500'};
-    if (meta.blocking===false) return {dot:'bg-yellow-500',text:'Blocking OFF',textClass:'text-yellow-600 dark:text-yellow-500'};
-    if (meta.health==='slow') return {dot:'bg-yellow-500',text:'Slow',textClass:'text-yellow-600 dark:text-yellow-500'};
-    return {dot:'bg-green-500',text:meta.blocking===true?'Blocking ON':'Online',textClass:'text-green-600 dark:text-green-500'};
+
+  function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
   }
-  function addTrend(name,value) { (trendHistory[name] ||= []).push(value); if (trendHistory[name].length>MAX_TREND_POINTS) trendHistory[name].shift(); }
-  function renderSparkline(name,el) {
-    if (!el || !appConfig.show_trends) return;
-    const values=trendHistory[name]||[]; if(values.length<2){el.innerHTML='';return;}
-    const min=Math.min(...values), max=Math.max(...values), range=max-min||1;
-    const points=values.map((v,i)=>`${(i/(values.length-1))*100},${24-((v-min)/range)*20}`).join(' ');
-    el.innerHTML=`<svg viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true" style="width:80px;height:28px"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>`;
+
+  function addMetric(parent, key, label, color, compact = false) {
+    const row = element('div', compact ? 'mobile-metric' : 'metric-row');
+    const caption = element('span', 'metric-label', label);
+    const value = element('span', `metric-value ${color}`, '--');
+    value.dataset.value = key;
+    row.append(caption, value);
+    parent.append(row);
   }
-  function updatePiholeUI(name,raw) {
-    const section=document.getElementById(`pihole-${name}-section`); if(!section)return;
-    const meta=raw?._pi_dash||{}, hasError=!!raw?.error, status=healthPresentation(meta,hasError);
-    const dot=section.querySelector('.status-dot'), health=section.querySelector('.pihole-health'), latency=section.querySelector('.pihole-latency');
-    dot.className=`status-dot ${status.dot}`; health.className=`pihole-health text-xs ${status.textClass}`; health.textContent=status.text;
-    latency.textContent=Number.isFinite(Number(meta.latency_ms))?`${Number(meta.latency_ms).toFixed(0)} ms`:'-- ms';
-    if(hasError){ section.querySelectorAll('[data-metric]').forEach(el=>el.textContent=el.dataset.metric==='percent'?'--%':'--'); section.querySelector('.pihole-cache').textContent='-- / --'; section.querySelector('.pihole-rate').textContent='(--/sec)'; return; }
-    const s=summaryStats(raw); let rateValue,rateUnit;
-    if(s.rate<1){rateValue=(s.rate*60).toFixed(1);rateUnit='/min';}else{rateValue=s.rate.toFixed(1);rateUnit='/sec';}
-    section.querySelector('.pihole-rate').textContent=`(${rateValue}${rateUnit})`;
-    section.querySelector('.pihole-total').textContent=s.total.toLocaleString(); section.querySelector('.pihole-blocked').textContent=s.blocked.toLocaleString(); section.querySelector('.pihole-percent').textContent=`${s.percentage.toFixed(1)}%`; section.querySelector('.pihole-clients').textContent=s.clients.toLocaleString(); section.querySelector('.pihole-cache').textContent=`${s.cached.toLocaleString()} / ${s.forwarded.toLocaleString()}`; section.querySelector('.pihole-unique').textContent=s.unique.toLocaleString(); section.querySelector('.pihole-domains').textContent=s.domains.toLocaleString();
-    addTrend(name,s.rate); renderSparkline(name,section.querySelector('.pihole-sparkline'));
+
+  function safeAdminUrl(address) {
+    try {
+      const url = new URL(address);
+      if (!['http:', 'https:'].includes(url.protocol)) return null;
+      url.pathname = url.pathname.replace(/\/$/, '') + '/admin';
+      url.search = '';
+      url.hash = '';
+      return url.href;
+    } catch (_) { return null; }
   }
+
+  function createCard(pihole, index) {
+    const section = element('section', 'instance-card');
+    const heading = element('div', 'instance-heading');
+    const identity = element('div', 'instance-identity');
+    const nameLine = element('h2', 'instance-name');
+    const url = pihole.link ? safeAdminUrl(pihole.address) : null;
+    const name = element(url ? 'a' : 'span', '', pihole.name);
+    if (url) {
+      name.href = url;
+      name.target = '_blank';
+      name.rel = 'noopener noreferrer';
+      name.setAttribute('aria-label', `Open ${pihole.name} Pi-hole Admin`);
+    }
+    const rate = element('span', 'pihole-rate', '(--/sec)');
+    nameLine.append(name, ' ', rate);
+    const healthLine = element('div', 'instance-health');
+    const dot = element('span', 'status-dot status-neutral');
+    const health = element('span', 'pihole-health', 'Checking');
+    healthLine.append(dot, health);
+    identity.append(nameLine, healthLine);
+    const sparkline = element('div', 'pihole-sparkline');
+    sparkline.setAttribute('aria-hidden', 'true');
+    heading.append(identity, sparkline);
+    section.append(heading);
+
+    const compact = element('div', 'mobile-instance-summary');
+    addMetric(compact, 'total', 'Queries', 'text-blue-500', true);
+    addMetric(compact, 'blocked', 'Blocked', 'text-red-500', true);
+    addMetric(compact, 'percentage', 'Blocked %', 'text-yellow-600 dark:text-yellow-500', true);
+    section.append(compact);
+
+    const details = element('div', 'instance-details');
+    details.id = `instance-details-${index}`;
+    for (const [key, label, color] of metrics) addMetric(details, key, label, color);
+    section.append(details);
+    const toggle = element('button', 'instance-toggle', 'Show details');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', details.id);
+    toggle.addEventListener('click', () => {
+      const expanded = section.classList.toggle('is-expanded');
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.textContent = expanded ? 'Hide details' : 'Show details';
+    });
+    section.append(toggle);
+    cards.set(pihole.name, section);
+    return section;
+  }
+
+  function renderSparkline(name, section, rate) {
+    const target = section.querySelector('.pihole-sparkline');
+    if (!appConfig.show_trends) { target.replaceChildren(); return; }
+    const history = trendHistory.get(name) || [];
+    history.push(rate);
+    if (history.length > MAX_TREND_POINTS) history.shift();
+    trendHistory.set(name, history);
+    if (history.length < 2) return;
+    const min = Math.min(...history), max = Math.max(...history), range = max - min || 1;
+    const points = history.map((v, i) => `${i / (history.length - 1) * 100},${24 - (v - min) / range * 20}`).join(' ');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 100 28');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', points);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', 'currentColor');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.append(line);
+    target.replaceChildren(svg);
+  }
+
+  function updatePiholeUI(name, raw) {
+    const section = cards.get(name);
+    if (!section) return;
+    const meta = raw?._pi_dash || {};
+    const failed = !raw || !!raw.error || !raw.queries;
+    const status = core.healthPresentation(meta, failed);
+    section.querySelector('.status-dot').className = `status-dot status-${status.state}`;
+    const health = section.querySelector('.pihole-health');
+    health.className = `pihole-health status-text-${status.state}`;
+    health.textContent = status.text;
+    section.querySelector('.pihole-rate').textContent = failed ? '(--/sec)' : `(${core.formatRate(core.summaryStats(raw).rate)})`;
+    const stats = core.summaryStats(failed ? null : raw);
+    const values = failed ? {} : {
+      total: number(stats.total), blocked: number(stats.blocked),
+      percentage: `${stats.percentage.toFixed(1)}%`,
+      cache: `${number(stats.cached)} / ${number(stats.forwarded)}`,
+      unique: number(stats.unique), clients: number(stats.clients), domains: number(stats.domains),
+    };
+    section.querySelectorAll('[data-value]').forEach(node => {
+      node.textContent = values[node.dataset.value] ?? (node.dataset.value === 'percentage' ? '--%' : '--');
+    });
+    if (failed) { section.querySelector('.pihole-sparkline').replaceChildren(); trendHistory.delete(name); }
+    else renderSparkline(name, section, stats.rate);
+  }
+
   function updateNetworkSummary(summary) {
-    const el=document.getElementById('network-summary'); if(!el || !appConfig.show_network_summary || !summary)return;
-    el.style.display='block'; el.querySelector('.network-total').textContent=Number(summary.total_queries||0).toLocaleString(); el.querySelector('.network-blocked').textContent=Number(summary.blocked_queries||0).toLocaleString(); el.querySelector('.network-percent').textContent=`${Number(summary.percent_blocked||0).toFixed(1)}%`; el.querySelector('.network-cache').textContent=`${Number(summary.cached_queries||0).toLocaleString()} / ${Number(summary.forwarded_queries||0).toLocaleString()}`;
-    const parts=[]; if(summary.healthy_instances)parts.push(`${summary.healthy_instances} healthy`); if(summary.slow_instances)parts.push(`${summary.slow_instances} slow`); if(summary.offline_instances)parts.push(`${summary.offline_instances} offline`); el.querySelector('.network-health').textContent=parts.join(' · ')||'No active Pi-holes';
+    if (!appConfig.show_network_summary || !summary) return;
+    network.hidden = false;
+    network.querySelector('.network-health').textContent = core.networkStatus(summary);
+    network.querySelector('.network-total').textContent = number(summary.total_queries);
+    network.querySelector('.network-blocked').textContent = number(summary.blocked_queries);
+    network.querySelector('.network-percent').textContent = `${Number(summary.percent_blocked || 0).toFixed(1)}%`;
+    network.querySelector('.network-cache').textContent = `${number(summary.cached_queries)} / ${number(summary.forwarded_queries)}`;
+    const partial = summary.partial || summary.contributing_instances < summary.instances;
+    network.querySelector('.network-partial').hidden = !partial;
+    network.classList.toggle('is-partial', Boolean(partial));
   }
-  function updateTimestamp(){ lastUpdateTime=Date.now(); const el=document.getElementById('last-updated'); el.textContent=`Last updated: ${new Date().toLocaleTimeString()}`; el.className='text-xs text-gray-500 dark:text-gray-400'; }
-  function updateStaleness(){ if(lastUpdateTime&&appConfig&&Date.now()-lastUpdateTime>(appConfig.refresh_interval||5000)*2) document.getElementById('last-updated').className='text-xs text-yellow-600 dark:text-yellow-500'; }
-  async function refreshStats(){ if(statsFetching)return; statsFetching=true; try{const payload=await fetchData('data?include_summary=true'); for(const [name,raw] of Object.entries(payload.stats||{}))updatePiholeUI(name,raw); updateNetworkSummary(payload.summary); updateTimestamp();}catch(e){console.error('Failed to refresh stats:',e);}finally{statsFetching=false;} }
-  async function refreshQueries(){ if(!appConfig?.show_queries||queriesFetching)return; queriesFetching=true; try{renderQueries(await fetchData('queries?length=50'));}catch(e){console.error('Failed to refresh queries:',e);}finally{queriesFetching=false;} }
-  function startTimers(){ if(!appConfig)return; if(!statsTimer)statsTimer=setInterval(refreshStats,appConfig.refresh_interval||5000); if(appConfig.show_queries&&!queriesTimer)queriesTimer=setInterval(refreshQueries,appConfig.queries_refresh_interval||appConfig.refresh_interval||5000); if(!stalenessTimer)stalenessTimer=setInterval(updateStaleness,1000); }
-  function stopTimers(){ clearInterval(statsTimer);clearInterval(queriesTimer);clearInterval(stalenessTimer);statsTimer=queriesTimer=stalenessTimer=null; }
-  function renderQueries(allQueries){ const container=document.getElementById('background-queries'); if(!container||queryFeedPaused)return; const newItems=[],pending={}; for(const[name,queries]of Object.entries(allQueries||{})){if(!Array.isArray(queries))continue;const last=lastCursorByPihole[name]??-Infinity;let max=last;for(const q of queries){const id=q.id!=null?Number(q.id):null,time=q.time!=null?Number(q.time):null,cursor=id!==null?id:(time!==null?time:-Infinity);if(cursor>last)newItems.push({...q,piholeName:name,__cursor:cursor});if(cursor>max)max=cursor;}pending[name]=max;} if(!newItems.length)return;Object.assign(lastCursorByPihole,pending);newItems.sort((a,b)=>a.__cursor-b.__cursor);for(const item of newItems){const li=document.createElement('li');li.className=`opacity-90 text-[10px] leading-tight px-1 whitespace-nowrap ${item.blocked?'text-red-600 dark:text-red-500':'text-green-600 dark:text-green-500'}`;li.textContent=`[${item.piholeName}] ${item.domain||''}`;container.appendChild(li);}while(container.children.length>100)container.removeChild(container.firstChild); }
-  function createCard(p){ const section=document.createElement('section');section.id=`pihole-${p.name}-section`;section.className='bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full';const safeName=escapeHtml(p.name),name=p.link?`<a href="${escapeHtml(p.address)}/admin" target="_blank" rel="noopener noreferrer" class="hover:text-teal-500">${safeName}</a>`:safeName; section.innerHTML=`<div class="flex justify-between items-baseline mb-3"><div><h2 class="text-xl font-semibold text-gray-700 dark:text-cyan-400">${name} <span class="pihole-rate text-sm font-normal text-gray-500 dark:text-gray-400">(--/sec)</span></h2><div class="text-xs"><span class="status-dot bg-gray-500"></span> <span class="pihole-health text-gray-500">Checking</span> <span class="pihole-latency text-gray-500">-- ms</span></div></div><div class="pihole-sparkline text-teal-500" style="width:80px;height:28px"></div></div><div class="space-y-1.5 text-sm"><div class="flex justify-between items-center"><span class="text-gray-500 dark:text-gray-400">Total Queries</span><span data-metric="total" class="font-medium text-blue-500 pihole-total">--</span></div><div class="flex justify-between items-center"><span class="text-gray-500 dark:text-gray-400">Queries Blocked</span><span data-metric="blocked" class="font-medium text-red-500 pihole-blocked">--</span></div><div class="flex justify-between items-center"><span class="text-gray-500 dark:text-gray-400">Percent Blocked</span><span data-metric="percent" class="font-medium text-yellow-600 dark:text-yellow-500 pihole-percent">--%</span></div><div class="flex justify-between items-center"><span class="text-gray-500 dark:text-gray-400">Cached / Forwarded</span><span class="font-medium text-indigo-500 pihole-cache">-- / --</span></div><div class="flex justify-between items-center"><span class="text-gray-500 dark:text-gray-400">Unique Domains</span><span data-metric="unique" class="font-medium text-orange-500 pihole-unique">--</span></div><div class="flex justify-between items-center"><span class="text-gray-500 dark:text-gray-400">Active Clients</span><span data-metric="clients" class="font-medium text-purple-500 pihole-clients">--</span></div><div class="flex justify-between items-center"><span class="text-gray-500 dark:text-gray-400">Domains on Lists</span><span data-metric="domains" class="font-medium text-green-600 dark:text-green-500 pihole-domains">--</span></div></div>`; return section; }
-  async function init(){ try{const data=await fetchData('init');appConfig=data.config;const main=document.querySelector('main');main.innerHTML='';for(const p of appConfig.piholes||[])main.appendChild(createCard(p));for(const[name,raw]of Object.entries(data.data||{}))updatePiholeUI(name,raw);updateNetworkSummary(data.summary);if(data.queries)renderQueries(data.queries);updateTimestamp();startTimers();}catch(e){console.error('Failed to initialize dashboard:',e);document.getElementById('last-updated').textContent='Unable to initialize dashboard';} }
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopTimers();else{refreshStats();refreshQueries();startTimers();}});window.addEventListener('offline',stopTimers);window.addEventListener('online',()=>{refreshStats();refreshQueries();startTimers();});const queries=document.getElementById('background-queries');queries?.addEventListener('mouseenter',()=>{queryFeedPaused=true;});queries?.addEventListener('mouseleave',()=>{queryFeedPaused=false;});if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(console.error));init();
+
+  function updateTimestamp() {
+    lastUpdateTime = Date.now();
+    timestamp.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    timestamp.classList.remove('is-stale');
+  }
+  function updateStaleness() {
+    if (!lastUpdateTime || !appConfig) return;
+    timestamp.classList.toggle('is-stale', Date.now() - lastUpdateTime > appConfig.refresh_interval * 2);
+  }
+
+  function renderQueryRows() {
+    const fragment = document.createDocumentFragment();
+    for (const group of queryRows) {
+      const row = element('li', group.blocked ? 'query-blocked' : 'query-allowed');
+      row.textContent = group.label + (group.count > 1 ? ` (x${group.count})` : '');
+      row.title = group.label;
+      fragment.append(row);
+    }
+    queryContainer.replaceChildren(fragment);
+    if (queryPanel.classList.contains('is-open')) queryContainer.scrollTop = queryContainer.scrollHeight;
+  }
+
+  function flushQueries() {
+    if (queryFeedPaused || !pendingQueries.length) return;
+    const groups = core.groupConsecutiveQueries(pendingQueries);
+    pendingQueries = [];
+    const merged = core.mergeConsecutiveGroups(queryRows, groups, MAX_ROWS);
+    queryRows.splice(0, queryRows.length, ...merged);
+    renderQueryRows();
+  }
+
+  function renderQueries(data) {
+    const events = core.collectNewQueries(queryTracker, data);
+    if (!events.length) return;
+    pendingQueries.push(...events);
+    if (pendingQueries.length > MAX_PENDING) pendingQueries = pendingQueries.slice(-MAX_PENDING);
+    flushQueries();
+  }
+
+  function setQueryPaused(paused) {
+    queryFeedPaused = paused;
+    pauseButton.textContent = paused ? 'Resume' : 'Pause';
+    pauseButton.setAttribute('aria-pressed', String(paused));
+    if (!paused) flushQueries();
+  }
+
+  function canApply(generation, signal) {
+    return generation === foregroundGeneration && visible() && !signal.aborted;
+  }
+
+  async function refreshStats() {
+    if (!appConfig || !visible() || statsFetching) return;
+    statsFetching = true;
+    const generation = foregroundGeneration;
+    const controller = new AbortController();
+    statsController = controller;
+    try {
+      const payload = await fetchData('data?include_summary=true', controller.signal);
+      if (!canApply(generation, controller.signal)) return;
+      for (const [name, raw] of Object.entries(payload.stats || {})) updatePiholeUI(name, raw);
+      updateNetworkSummary(payload.summary);
+      updateTimestamp();
+    } catch (error) {
+      if (error.name !== 'AbortError') console.error('Failed to refresh stats:', error);
+    } finally {
+      statsFetching = false;
+      if (statsController === controller) statsController = null;
+    }
+  }
+
+  async function refreshQueries() {
+    if (!appConfig?.show_queries || !visible() || queriesFetching) return;
+    queriesFetching = true;
+    const generation = foregroundGeneration;
+    const controller = new AbortController();
+    queriesController = controller;
+    try {
+      const data = await fetchData('queries?length=50', controller.signal);
+      if (canApply(generation, controller.signal)) renderQueries(data);
+    } catch (error) {
+      if (error.name !== 'AbortError') console.error('Failed to refresh queries:', error);
+    } finally {
+      queriesFetching = false;
+      if (queriesController === controller) queriesController = null;
+    }
+  }
+
+  function stopTimers() {
+    foregroundGeneration++;
+    clearInterval(statsTimer); clearInterval(queriesTimer); clearInterval(stalenessTimer);
+    statsTimer = queriesTimer = stalenessTimer = null;
+    initController?.abort(); statsController?.abort(); queriesController?.abort();
+  }
+
+  function startTimers() {
+    if (!appConfig || !visible() || statsTimer) return;
+    statsTimer = setInterval(refreshStats, appConfig.refresh_interval);
+    if (appConfig.show_queries) queriesTimer = setInterval(refreshQueries, appConfig.queries_refresh_interval);
+    stalenessTimer = setInterval(updateStaleness, 1000);
+  }
+
+  async function init() {
+    if (!visible()) return;
+    const generation = foregroundGeneration;
+    const controller = new AbortController();
+    initController = controller;
+    try {
+      const data = await fetchData('init', controller.signal);
+      if (!canApply(generation, controller.signal)) return;
+      appConfig = data.config;
+      main.replaceChildren(); cards.clear();
+      for (const [index, pihole] of (appConfig.piholes || []).entries()) main.append(createCard(pihole, index));
+      if (!cards.size) main.append(element('p', 'empty-message', 'No Pi-holes are enabled. Check config.json.'));
+      for (const [name, raw] of Object.entries(data.data || {})) updatePiholeUI(name, raw);
+      updateNetworkSummary(data.summary);
+      queryPanel.hidden = !appConfig.show_queries;
+      if (data.queries) renderQueries(data.queries);
+      updateTimestamp();
+      startTimers();
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Failed to initialize dashboard:', error);
+        timestamp.textContent = 'Unable to initialize dashboard';
+      }
+    } finally {
+      if (initController === controller) initController = null;
+    }
+  }
+
+  function resumeForeground() {
+    if (!visible()) return;
+    if (!appConfig) { if (!initController) init(); return; }
+    refreshStats(); refreshQueries(); startTimers();
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopTimers(); else resumeForeground();
+  });
+  window.addEventListener('offline', stopTimers);
+  window.addEventListener('online', resumeForeground);
+  window.addEventListener('pagehide', stopTimers);
+  window.addEventListener('pageshow', resumeForeground);
+
+  queryToggle.addEventListener('click', () => {
+    const open = queryPanel.classList.toggle('is-open');
+    queryToggle.setAttribute('aria-expanded', String(open));
+    queryToggle.textContent = open ? 'Hide queries' : 'Show queries';
+    if (open) queryContainer.scrollTop = queryContainer.scrollHeight;
+  });
+  pauseButton.addEventListener('click', () => setQueryPaused(!queryFeedPaused));
+  queryContainer.addEventListener('mouseenter', () => setQueryPaused(true));
+  queryContainer.addEventListener('mouseleave', () => setQueryPaused(false));
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(error => console.warn('Service worker:', error));
+  });
+  init();
 });
