@@ -2,7 +2,7 @@
 <html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pi-hole Dashboard</title>
     <link rel="icon" href="{{ICON_URL}}" />
     <link rel="manifest" href="manifest.json" />
@@ -18,18 +18,19 @@
       }
     </script>
   </head>
-  <body class="h-full flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300" style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <body class="h-full flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300">
     <div id="main-wrapper" class="w-full max-w-sm sm:max-w-xl mx-auto relative z-10">
       <header class="text-center mb-6">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Pi-Dash</h1>
-        <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400">Last updated: Never</p>
+        <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400" role="status">Last updated: Never</p>
       </header>
-      <section id="network-summary" style="display:none" class="bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
-        <div class="flex justify-between items-baseline mb-3">
+      <section id="network-summary" hidden class="bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
+        <div class="network-heading">
           <h2 class="text-sm font-semibold text-gray-700 dark:text-cyan-400">Network Summary</h2>
           <span class="network-health text-xs text-gray-500 dark:text-gray-400"></span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem" class="text-sm">
+        <p class="network-partial" hidden>Partial totals. One or more Pi-holes are not reporting.</p>
+        <div class="network-metrics text-sm">
           <div><div class="text-xs text-gray-500 dark:text-gray-400">Queries</div><div class="network-total font-medium text-blue-500">--</div></div>
           <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div><div class="network-blocked font-medium text-red-500">--</div></div>
           <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked %</div><div class="network-percent font-medium text-yellow-600 dark:text-yellow-500">--%</div></div>
@@ -37,8 +38,18 @@
         </div>
       </section>
       <main class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4"></main>
+      <section id="query-panel" class="query-panel" hidden aria-label="Recent DNS queries">
+        <div class="query-panel-header">
+          <span class="query-panel-title">Recent queries</span>
+          <div class="query-actions">
+            <button id="query-pause" type="button" aria-pressed="false">Pause</button>
+            <button id="query-toggle" type="button" aria-expanded="false" aria-controls="background-queries">Show queries</button>
+          </div>
+        </div>
+        <ul id="background-queries" aria-label="Recent DNS query activity"></ul>
+      </section>
     </div>
-    <ul id="background-queries" aria-hidden="true"></ul>
+    <script src="js/dashboard-core.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>
