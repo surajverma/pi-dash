@@ -116,10 +116,12 @@ document.addEventListener('DOMContentLoaded', () => {
     toggle.type = 'button';
     toggle.setAttribute('aria-expanded', 'false');
     toggle.setAttribute('aria-controls', details.id);
+    toggle.setAttribute('aria-label', `Show details for ${pihole.name}`);
     toggle.addEventListener('click', () => {
       const expanded = section.classList.toggle('is-expanded');
       toggle.setAttribute('aria-expanded', String(expanded));
       toggle.textContent = expanded ? 'Hide details' : 'Show details';
+      toggle.setAttribute('aria-label', `${toggle.textContent} for ${pihole.name}`);
     });
     section.append(toggle);
     cards.set(pihole.name, section);
@@ -128,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderSparkline(name, section, rate) {
     const target = section.querySelector('.pihole-sparkline');
+    target.hidden = !appConfig.show_trends;
     if (!appConfig.show_trends) { target.replaceChildren(); return; }
     const history = trendHistory.get(name) || [];
     history.push(rate);
@@ -206,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fragment.append(row);
     }
     queryContainer.replaceChildren(fragment);
-    if (queryPanel.classList.contains('is-open')) queryContainer.scrollTop = queryContainer.scrollHeight;
+    queryContainer.scrollTop = queryContainer.scrollHeight;
   }
 
   function isQueryPaused() { return manualPause || hoverPause; }
@@ -249,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateNetworkSummary(payload.summary);
       updateTimestamp();
     } catch (error) {
-      if (error.name !== 'AbortError') console.error('Failed to refresh stats:', error);
+      if (canApply(generation, controller.signal) && error.name !== 'AbortError') console.error('Failed to refresh stats:', error);
     } finally {
       if (statsController === controller) statsController = null;
     }
@@ -264,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await fetchData('queries?length=50', controller.signal);
       if (canApply(generation, controller.signal)) renderQueries(data);
     } catch (error) {
-      if (error.name !== 'AbortError') console.error('Failed to refresh queries:', error);
+      if (canApply(generation, controller.signal) && error.name !== 'AbortError') console.error('Failed to refresh queries:', error);
     } finally {
       if (queriesController === controller) queriesController = null;
     }
@@ -304,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateTimestamp();
       startTimers();
     } catch (error) {
-      if (error.name !== 'AbortError') {
+      if (canApply(generation, controller.signal) && error.name !== 'AbortError') {
         console.error('Failed to initialize dashboard:', error);
         timestamp.textContent = 'Unable to initialize dashboard';
       }

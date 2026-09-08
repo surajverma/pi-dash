@@ -82,3 +82,21 @@ test('a stale in-flight stats response cannot overwrite a newer foreground snaps
     assert.equal(app.w.document.querySelector('.instance-details [data-value="total"]').textContent, '3');
   } finally { app.close(); }
 });
+
+test('a late initialization error cannot overwrite successful recovery', async () => {
+  let rejectOld;
+  let requests = 0;
+  const app = setup(() => {
+    if (++requests === 1) return new Promise((_, reject) => { rejectOld = reject; });
+    return Promise.resolve(response({ config, data: {}, summary: { instances: 0 } }));
+  });
+  try {
+    await app.settle();
+    app.hide(true); app.hide(false); await app.settle();
+    const current = app.w.document.getElementById('last-updated').textContent;
+    rejectOld(new Error('late network failure'));
+    await app.settle();
+    assert.equal(app.w.document.getElementById('last-updated').textContent, current);
+    assert.equal(app.timers.size, 2);
+  } finally { app.close(); }
+});

@@ -56,7 +56,8 @@ class ConfigCompatibilityTests(unittest.TestCase):
         with open(os.path.join(proxy.APP_ROOT, 'config-example.json'), encoding='utf-8') as handle:
             example = json.load(handle)
         self.assertIn('_comment', example)
-        self.assertIn('refresh_interval', example['_comment'])
+        self.assertEqual(set(example) - {'_comment'}, set(example['_comment']) - {'about'})
+        self.assertEqual(set(example['piholes'][0]) - {'_comment'}, set(example['piholes'][0]['_comment']))
         proxy.config = example
         filtered = proxy.filtered_config()
         self.assertNotIn('_comment', filtered)
@@ -99,6 +100,20 @@ class BlockingAndSummaryTests(unittest.TestCase):
         self.assertEqual(result['healthy_instances'], 0)
         self.assertEqual(result['blocking_unknown_instances'], 1)
         self.assertFalse(result['partial'])
+
+    def test_unreachable_during_initial_auth_is_not_bad_credentials(self):
+        with patch.object(proxy.requests, 'post', side_effect=proxy.requests.exceptions.ConnectionError('connection refused')):
+            data = proxy.fetch_one({'name': 'Unreachable', 'address': 'http://localhost'})[1]
+        self.assertEqual(data['_pi_dash']['health'], 'unreachable')
+
+    def test_http_auth_errors_remain_auth_errors(self):
+        for status in (401, 403):
+            response = proxy.requests.Response()
+            response.status_code = status
+            error = proxy.requests.exceptions.HTTPError(response=response)
+            with patch.object(proxy, 'pihole_get', side_effect=error):
+                data = proxy.fetch_one({'name': 'Auth', 'address': 'http://localhost'})[1]
+            self.assertEqual(data['_pi_dash']['health'], 'auth_error')
 
     def test_fetch_one_has_no_latency_metric(self):
         class Response:

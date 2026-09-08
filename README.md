@@ -32,9 +32,11 @@ Pi-Dash is a lightweight dashboard for monitoring one or more Pi-hole instances.
 
 ## Mobile and desktop layout
 
-Desktop keeps the full metric cards and ambient query feed. On narrow screens, Pi-Dash uses smaller spacing, a compact Network Summary, and a condensed card for each Pi-hole. The condensed card shows its name, query rate, health/blocking state, total queries, blocked queries and blocked percentage. Tap **Show details** to reveal all seven metrics shown on desktop; tap **Hide details** to collapse it again.
+Desktop keeps the full metric cards, query rates and sparklines. On narrow screens, Pi-Dash uses smaller spacing, a compact Network Summary, and a condensed card for each Pi-hole. The condensed card shows its name, query rate, health/blocking state, total queries, blocked queries and blocked percentage. Tap **Show details** to reveal all seven metrics shown on desktop; tap **Hide details** to collapse it again.
 
-The mobile query feed is a collapsible panel below the cards. It no longer shifts the dashboard upward by a percentage of the viewport. There is no requirement to fit every detail on one screen; the goal is to make the critical information visible quickly, with full details available when needed. The desktop query-background layout is preserved.
+Compact mode applies below 768 CSS pixels wide, and also at up to 1024 pixels wide when the viewport is 500 pixels high or less (including phone landscape and short resized windows). Below 640 pixels, cards use one column; wider layouts use two. Each details button has an instance-specific accessible name, supports keyboard activation, and preserves its expanded state when resizing.
+
+The query feed always occupies its own space below the cards, so it cannot cover them or become a narrow strip behind them. It is collapsible in compact mode and open on desktop, with a bounded scrolling area and a Pause control. Long values and names wrap instead of overflowing. Short desktop dashboards are centered safely; taller dashboards scroll from the top without clipping the heading or Network Summary. Full details and larger instance lists can require vertical scrolling.
 
 ### Why the latency number was removed
 
@@ -119,7 +121,7 @@ Provide the variable through your shell or Docker environment. Literal passwords
 
 Stats and recent queries are fetched separately. Opening the dashboard on multiple devices shares short-lived server-side snapshots through the in-process cache. The cache is demand-driven: Pi-Dash does not run a background polling service of its own.
 
-The browser stops its statistics and query timers when the page becomes hidden or the device goes offline, and resumes when it becomes visible/online again. Pending browser requests are aborted and stale responses are ignored. An upstream HTTP request already started by the server may still finish, but no repeated server-side polling continues after the browser stops requesting data.
+The browser stops its statistics and query timers when the page becomes hidden or the device goes offline, and resumes when it becomes visible/online again. Pending browser requests are aborted, and stale responses or initialization errors cannot overwrite newer foreground state. Returning to a visible, online page refreshes immediately and starts only one timer for each feed. Going online while the page is still hidden does not resume polling. An upstream HTTP request already started by the server may still finish, but no repeated server-side polling continues after the browser stops requesting data.
 
 The feed fetches the latest 50 queries per Pi-hole on each poll. It tracks IDs separately for each instance and uses timestamps for cross-instance ordering. Actual duplicate DNS requests are legitimate and are not deleted from the API data. For display, only **consecutive** entries with the same Pi-hole, domain and blocked/allowed status are combined into `(xN)`. The last group can continue increasing across refreshes. A different domain or blocking status starts a new row. No rolling-window aggregation or top-domain ranking is used.
 
@@ -144,6 +146,7 @@ To test the changes without merging into `main`:
 ```bash
 git fetch origin
 git switch feature/dashboard-hardening
+git pull --ff-only origin feature/dashboard-hardening
 # If the branch does not exist locally yet:
 # git switch --track origin/feature/dashboard-hardening
 ```
@@ -216,11 +219,28 @@ npm run test:js
 npm run build:css
 ```
 
-Backend tests cover config fallback, cache behavior, zero enabled instances, TLS/secret resolution, blocking states, partial aggregation, legacy API response shapes and process health. Browser tests cover compact-card expansion, all desktop metrics, consecutive grouping, overlapping queries, per-instance IDs, hidden/offline polling, disabled query feeds and safe rendering of instance names. GitHub Actions runs both suites and verifies the frontend build.
+Backend tests cover config fallback, cache behavior, zero enabled instances, TLS/secret resolution, reachability versus authentication errors, blocking states, partial aggregation, legacy API response shapes and process health. Frontend behavior tests use jsdom for grouping, expansion and deterministic request/timer races; **jsdom does not render CSS**.
+
+Run the separate Chromium suite to check the actual rendered page:
+
+```bash
+npx playwright install chromium
+npm run test:browser
+```
+
+The rendered fixture loads the production HTML, CSS and JavaScript with synthetic API responses. It checks 320, 375, 430 and 768 pixel widths, phone landscape, intermediate desktop sizes and desktops up to 1920 pixels, in both themes. It covers compact and expanded cards, long values/names, six Pi-holes, zero Pi-holes, blocking/offline/auth states, feed grouping, card/feed overlap, page overflow, resizing and deterministic visibility/offline races. CI runs these checks and retains screenshots in the `rendered-dashboard` artifact. Playwright is a development-only dependency; Flask and vanilla JavaScript remain the application runtime.
+
+For manual visual and keyboard inspection with the same synthetic data:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:5011/tests/browser/`, select a viewport/scenario/theme, and use **Inspect viewport** or **Run all rendered checks**. This command is only a test fixture; use `python proxy.py` to run the real dashboard. Inspect your real Pi-holes with your existing configuration before merging. In browser Network tools, confirm `/data` and `/queries` stop when switching tabs or going offline, and resume without duplicate request streams.
 
 ## PWA behavior
 
-Pi-Dash caches its application shell for offline/reload resilience. The service worker includes both dashboard scripts and both stylesheets, uses network-first loading for navigation and application assets, and never caches API responses. Live statistics require a working connection to Pi-Dash and its Pi-hole instances. A new cache version is installed for the mobile update; if an older installed PWA continues displaying an old shell after upgrading, close/reopen it or perform a hard refresh.
+Pi-Dash caches its application shell for offline/reload resilience. The service worker includes both dashboard scripts and both stylesheets, uses network-first loading for navigation and application assets, and never caches API responses. Live statistics require a working connection to Pi-Dash and its Pi-hole instances. A new cache version is installed for the responsive update; if an older installed PWA continues displaying an old shell after upgrading, close/reopen it or perform a hard refresh.
 
 ## Credits
 

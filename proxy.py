@@ -97,23 +97,21 @@ def headers(sid):
 
 def authenticate_and_get_sid(pihole):
     address = pihole['address'].rstrip('/')
-    try:
-        response = requests.post(
-            address + '/api/auth',
-            json={'password': resolve_secret(pihole.get('password', ''))},
-            timeout=DEFAULT_REQUEST_TIMEOUT,
-            verify=get_verify_setting(pihole),
-        )
-        if response.status_code == 200:
-            data = response.json()
-            sid = data.get('session', {}).get('sid')
-            if sid:
-                return sid
-            if data.get('session', {}).get('message') == 'no password set':
-                return NO_PASSWORD
-        return None
-    except requests.exceptions.RequestException:
-        return None
+    response = requests.post(
+        address + '/api/auth',
+        json={'password': resolve_secret(pihole.get('password', ''))},
+        timeout=DEFAULT_REQUEST_TIMEOUT,
+        verify=get_verify_setting(pihole),
+    )
+    if response.status_code == 200:
+        data = response.json()
+        sid = data.get('session', {}).get('sid')
+        if sid:
+            return sid
+        if data.get('session', {}).get('message') == 'no password set':
+            return NO_PASSWORD
+    response.raise_for_status()
+    return None
 
 
 def get_sid(pihole, force=False):
@@ -256,7 +254,9 @@ def fetch_one(pihole):
     except RuntimeError as exc:
         return name, {'error': str(exc), '_pi_dash': {'health': 'auth_error'}}
     except (requests.exceptions.RequestException, ValueError) as exc:
-        return name, {'error': str(exc), '_pi_dash': {'health': 'unreachable'}}
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        health = 'auth_error' if status in (401, 403) else 'unreachable'
+        return name, {'error': str(exc), '_pi_dash': {'health': health}}
 
 
 def _stats_uncached():

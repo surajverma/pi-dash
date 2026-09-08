@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-dashboard-cache-v2-mobile';
+const CACHE_NAME = 'pi-dashboard-cache-v3-responsive';
 const APP_SHELL = [
   '{{CACHE_URL}}',
   '{{CACHE_URL}}css/style.css',

@@ -42,11 +42,24 @@ jobs:
           node --check js/app.js
           node --check sw.js
 
-      - name: Run browser regression tests
+      - name: Run frontend behavior regressions
         run: npm run test:js
 
       - name: Verify Tailwind build
         run: npm run build:css
+
+      - name: Install rendered-test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run rendered viewport and lifecycle regressions
+        run: npm run test:browser
+
+      - name: Save rendered test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-dashboard
+          path: test-results/
 
       - name: Verify the shipped HTML, scripts and styles
         run: |

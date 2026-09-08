@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Pi-Dash rendered regressions</title>
+<style>body{font:14px system-ui;margin:16px;background:#e5e7eb}iframe{border:0;display:block;background:white}label{margin-right:12px}#result{white-space:pre-wrap}#viewport{width:max-content}h1{font-size:20px}</style></head>
+<body><h1>Pi-Dash rendered regressions</h1>
+<form><label>Width <input name="width" type="number" value="768"></label><label>Height <input name="height" type="number" value="375"></label><label>Scenario <select name="scenario"><option>normal</option><option>long</option><option>many</option><option>zero</option><option>states</option></select></label><label>Theme <select name="dark"><option value="false">Light</option><option value="true">Dark</option></select></label><button>Inspect viewport</button></form>
+<p><button id="run" type="button">Run all rendered checks</button></p><pre id="result">Ready</pre><div id="viewport"></div>
+<script>
+const params = new URLSearchParams(location.search);
+const frame = document.createElement('iframe');
+frame.title = 'Dashboard viewport';
+frame.width = params.get('width') || 768;
+frame.height = params.get('height') || 375;
+frame.src = '/fixture/?scenario=' + (params.get('scenario') || 'normal') + '&dark=' + (params.get('dark') || 'false');
+document.querySelector('#viewport').append(frame);
+for (const name of ['width', 'height', 'scenario', 'dark']) if (params.has(name)) document.querySelector(`[name="${name}"]`).value = params.get(name);
+</script><script src="/tests/browser/checks.js"></script></body></html>

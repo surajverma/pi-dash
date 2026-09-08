@@ -6,3 +6,5 @@ dist/
 .env
 *.log
 css/style.css
+__pycache__/
+test-results/
