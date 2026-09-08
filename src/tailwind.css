@@ -2,9 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- Your custom CSS below --- */
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     -webkit-tap-highlight-color: transparent;
 }
 html, body {
@@ -17,7 +16,6 @@ html, body {
     display: inline-block;
 }
 
-
 #background-queries {
     position: fixed;
     bottom: 0; left: 0; right: 0; top: auto;
@@ -26,61 +24,41 @@ html, body {
     flex-direction: column;
     justify-content: flex-end;
     list-style: none; margin: 0; padding: 4px 6px 8px;
-    font-family: 'Inter', monospace; font-size: 10px; line-height: 1.25;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 10px; line-height: 1.25;
     pointer-events: none; overflow: hidden; z-index: 0;
-    
     -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0.5) 80%, rgba(0,0,0,0) 100%);
     mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0.5) 80%, rgba(0,0,0,0) 100%);
-    
     backdrop-filter: blur(0.5px);
     -webkit-backdrop-filter: blur(0.5px);
 }
-
 
 #background-queries li {
     text-shadow: 0 1px 2px rgba(0,0,0,0.15);
     letter-spacing: 0.01em;
 }
 
-@keyframes bqFadeIn { 
-    to { opacity:0.9; transform:translateY(0); } 
-}
-
-
 @media (max-width: 640px) and (orientation: portrait) {
-    #background-queries { 
-        height: 42vh; 
-        max-height: 42vh; 
-    }
-   
+    #background-queries { height: 42vh; max-height: 42vh; }
     body:has(#background-queries:not(:empty)) #main-wrapper {
         transform: translateY(-8vh);
         transition: transform 0.3s ease;
     }
 }
 
-
 @media (max-width: 896px) and (orientation: landscape) {
     #background-queries {
-        height: 35vh;
-        max-height: 35vh;
-        font-size: 9px;
-        padding: 2px 4px 6px;
-        line-height: 1.2;
+        height: 35vh; max-height: 35vh; font-size: 9px;
+        padding: 2px 4px 6px; line-height: 1.2;
     }
-    
     body:has(#background-queries:not(:empty)) #main-wrapper {
         transform: translateY(-4vh);
         transition: transform 0.3s ease;
     }
 }
 
-
 @media (min-width: 897px) and (max-width: 1024px) and (orientation: landscape) {
     #background-queries {
-        height: 28vh;
-        max-height: 28vh;
-        font-size: 9px;
-        padding: 2px 6px 6px;
+        height: 28vh; max-height: 28vh; font-size: 9px; padding: 2px 6px 6px;
     }
 }
