@@ -1,21 +1,27 @@
 {
   "base_path": "/",
-  "refresh_interval": 1000,
+  "refresh_interval": 2000,
+  "queries_refresh_interval": 3000,
+  "cache_ttl": 1000,
   "show_queries": false,
+  "show_network_summary": true,
+  "show_trends": true,
   "piholes": [
     {
       "name": "Primary",
       "address": "https://pi.hole/one",
-      "password": "your_app_password_here",
+      "password": "${PIHOLE_PRIMARY_PASSWORD}",
       "enabled": true,
-      "link": true
+      "link": true,
+      "verify_ssl": false
     },
     {
       "name": "Secondary",
       "address": "https://pi.hole/two",
       "password": "your_app_password_here",
       "enabled": true,
-      "link": false
+      "link": false,
+      "verify_ssl": false
     }
   ]
 }
