@@ -174,6 +174,10 @@ def fetch_queries(length=50,force=False):
         c=_queries_cache.get(length)
         if not force and c and now-c['time']<ttl: return c['data']
     with _queries_refresh_lock:
+        now=time.monotonic()
+        with _cache_lock:
+            c=_queries_cache.get(length)
+            if not force and c and now-c['time']<ttl: return c['data']
         d=_queries_uncached(length)
         with _cache_lock: _queries_cache[length]={'time':time.monotonic(),'data':d}
         return d
