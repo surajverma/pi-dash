@@ -216,4 +216,10 @@ def queries():
 def health(): return jsonify({'status':'ok','enabled_piholes':len(enabled()),'cache_ttl_ms':get_cache_ttl()})
 
 app.register_blueprint(bp,url_prefix=url_prefix)
+
+# Keep a root health endpoint for Docker/orchestrators even when the UI is
+# hosted below a configured base_path such as /pi-dash/.
+if url_prefix not in ('', '/'):
+    app.add_url_rule('/health','root_health',health)
+
 if __name__=='__main__': app.run(host='0.0.0.0',port=5001)
