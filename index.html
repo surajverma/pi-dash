@@ -4,22 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <title>Pi-hole Dashboard</title>
-
     <link rel="icon" href="{{ICON_URL}}" />
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" id="theme-color-meta" content="#1f2937" />
-
-  <!-- Tailwind CSS is now built locally and included below -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <link rel="stylesheet" href="css/style.css" />
-
     <script>
-      if (
-        localStorage.theme === 'dark' ||
-        (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
-      ) {
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
         document.getElementById('theme-color-meta').setAttribute('content', '#111827');
       } else {
@@ -28,19 +18,29 @@
       }
     </script>
   </head>
-  <body
-    class="h-full flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300">
-  <div id="main-wrapper" class="w-full max-w-sm sm:max-w-xl mx-auto relative z-10">
-      <header class="text-center mb-6">
+  <body class="min-h-full flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300">
+    <div id="main-wrapper" class="w-full max-w-sm sm:max-w-2xl mx-auto relative z-10 py-4">
+      <header class="text-center mb-4">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Pi-Dash</h1>
         <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400">Last updated: Never</p>
       </header>
 
+      <section id="network-summary" class="hidden bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg mb-4" aria-label="Network summary">
+        <div class="flex justify-between items-baseline mb-3">
+          <h2 class="text-sm uppercase tracking-wide font-semibold text-gray-600 dark:text-gray-300">Network summary</h2>
+          <span class="network-health text-xs text-gray-500 dark:text-gray-400"></span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Queries</div><div class="network-total font-semibold text-blue-500">--</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div><div class="network-blocked font-semibold text-red-500">--</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked %</div><div class="network-percent font-semibold text-yellow-600 dark:text-yellow-500">--%</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Cached / Forwarded</div><div class="network-cache font-semibold text-indigo-500">-- / --</div></div>
+        </div>
+      </section>
+
       <main class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4"></main>
     </div>
-
-  <ul id="background-queries" aria-hidden="true"></ul>
-
+    <ul id="background-queries" aria-hidden="true"></ul>
     <script src="js/app.js"></script>
   </body>
 </html>
