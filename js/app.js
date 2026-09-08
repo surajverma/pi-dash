@@ -23,8 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let appConfig = null;
   let statsTimer = null, queriesTimer = null, stalenessTimer = null;
   let statsController = null, queriesController = null, initController = null;
-  let statsFetching = false, queriesFetching = false;
-  let lastUpdateTime = null, queryFeedPaused = false;
+  let lastUpdateTime = null, manualPause = false, hoverPause = false;
   let foregroundGeneration = 0;
 
   const main = document.querySelector('main');
@@ -34,7 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const queryToggle = document.getElementById('query-toggle');
   const pauseButton = document.getElementById('query-pause');
   const timestamp = document.getElementById('last-updated');
-  const number = value => core.summaryStats({ queries: { total: value } }).total.toLocaleString();
+  const number = value => {
+    const parsed = Number(value);
+    return (Number.isFinite(parsed) ? parsed : 0).toLocaleString();
+  };
 
   function visible() {
     return !document.hidden && navigator.onLine !== false;
@@ -207,8 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (queryPanel.classList.contains('is-open')) queryContainer.scrollTop = queryContainer.scrollHeight;
   }
 
+  function isQueryPaused() { return manualPause || hoverPause; }
   function flushQueries() {
-    if (queryFeedPaused || !pendingQueries.length) return;
+    if (isQueryPaused() || !pendingQueries.length) return;
     const groups = core.groupConsecutiveQueries(pendingQueries);
     pendingQueries = [];
     const merged = core.mergeConsecutiveGroups(queryRows, groups, MAX_ROWS);
@@ -224,11 +227,10 @@ document.addEventListener('DOMContentLoaded', () => {
     flushQueries();
   }
 
-  function setQueryPaused(paused) {
-    queryFeedPaused = paused;
-    pauseButton.textContent = paused ? 'Resume' : 'Pause';
-    pauseButton.setAttribute('aria-pressed', String(paused));
-    if (!paused) flushQueries();
+  function updatePauseState() {
+    pauseButton.textContent = manualPause ? 'Resume' : 'Pause';
+    pauseButton.setAttribute('aria-pressed', String(manualPause));
+    if (!isQueryPaused()) flushQueries();
   }
 
   function canApply(generation, signal) {
@@ -236,8 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function refreshStats() {
-    if (!appConfig || !visible() || statsFetching) return;
-    statsFetching = true;
+    if (!appConfig || !visible() || (statsController && !statsController.signal.aborted)) return;
     const generation = foregroundGeneration;
     const controller = new AbortController();
     statsController = controller;
@@ -250,14 +251,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       if (error.name !== 'AbortError') console.error('Failed to refresh stats:', error);
     } finally {
-      statsFetching = false;
       if (statsController === controller) statsController = null;
     }
   }
 
   async function refreshQueries() {
-    if (!appConfig?.show_queries || !visible() || queriesFetching) return;
-    queriesFetching = true;
+    if (!appConfig?.show_queries || !visible() || (queriesController && !queriesController.signal.aborted)) return;
     const generation = foregroundGeneration;
     const controller = new AbortController();
     queriesController = controller;
@@ -267,7 +266,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       if (error.name !== 'AbortError') console.error('Failed to refresh queries:', error);
     } finally {
-      queriesFetching = false;
       if (queriesController === controller) queriesController = null;
     }
   }
@@ -277,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearInterval(statsTimer); clearInterval(queriesTimer); clearInterval(stalenessTimer);
     statsTimer = queriesTimer = stalenessTimer = null;
     initController?.abort(); statsController?.abort(); queriesController?.abort();
+    initController = statsController = queriesController = null;
   }
 
   function startTimers() {
@@ -287,7 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function init() {
-    if (!visible()) return;
+    if (!visible() || (initController && !initController.signal.aborted)) return;
     const generation = foregroundGeneration;
     const controller = new AbortController();
     initController = controller;
@@ -311,12 +310,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } finally {
       if (initController === controller) initController = null;
+      // A page can become visible before an aborted initialization settles.
+      // Restart only if no newer initialization has already taken ownership.
+      if (!appConfig && visible() && generation !== foregroundGeneration && !initController) init();
     }
   }
 
   function resumeForeground() {
     if (!visible()) return;
-    if (!appConfig) { if (!initController) init(); return; }
+    if (!appConfig) { init(); return; }
     refreshStats(); refreshQueries(); startTimers();
   }
   document.addEventListener('visibilitychange', () => {
@@ -333,9 +335,11 @@ document.addEventListener('DOMContentLoaded', () => {
     queryToggle.textContent = open ? 'Hide queries' : 'Show queries';
     if (open) queryContainer.scrollTop = queryContainer.scrollHeight;
   });
-  pauseButton.addEventListener('click', () => setQueryPaused(!queryFeedPaused));
-  queryContainer.addEventListener('mouseenter', () => setQueryPaused(true));
-  queryContainer.addEventListener('mouseleave', () => setQueryPaused(false));
+  pauseButton.addEventListener('click', () => { manualPause = !manualPause; updatePauseState(); });
+  if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+    queryContainer.addEventListener('mouseenter', () => { hoverPause = true; updatePauseState(); });
+    queryContainer.addEventListener('mouseleave', () => { hoverPause = false; updatePauseState(); });
+  }
   if ('serviceWorker' in navigator) window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(error => console.warn('Service worker:', error));
   });
