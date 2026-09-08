@@ -23,7 +23,7 @@ jobs:
       - name: Prepare test configuration
         run: cp config-example.json config.json
 
-      - name: Run regression tests
+      - name: Run backend regression tests
         run: python -m unittest discover -s tests -v
 
       - name: Compile-check backend
@@ -31,13 +31,27 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: '22'
 
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Syntax-check frontend
-        run: node --check js/app.js
+      - name: Syntax-check frontend and service worker
+        run: |
+          node --check js/dashboard-core.js
+          node --check js/app.js
+          node --check sw.js
+
+      - name: Run browser regression tests
+        run: npm run test:js
 
       - name: Verify Tailwind build
         run: npm run build:css
+
+      - name: Verify the shipped HTML, scripts and styles
+        run: |
+          test -s css/style.css
+          test -s css/dashboard.css
+          test -s js/dashboard-core.js
+          test -s js/app.js
+          node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8'); for(const file of ['css/style.css','css/dashboard.css','js/dashboard-core.js','js/app.js']) { if(!html.includes(file)||!fs.existsSync(file)) process.exit(1); }"
