@@ -18,23 +18,23 @@
       }
     </script>
   </head>
-  <body class="min-h-full flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300">
-    <div id="main-wrapper" class="w-full max-w-sm sm:max-w-2xl mx-auto relative z-10 py-4">
-      <header class="text-center mb-4">
+  <body class="h-full flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300" style="font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <div id="main-wrapper" class="w-full max-w-sm sm:max-w-xl mx-auto relative z-10">
+      <header class="text-center mb-6">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Pi-Dash</h1>
         <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400">Last updated: Never</p>
       </header>
 
-      <section id="network-summary" class="hidden bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg mb-4" aria-label="Network summary">
+      <section id="network-summary" class="hidden bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
         <div class="flex justify-between items-baseline mb-3">
-          <h2 class="text-sm uppercase tracking-wide font-semibold text-gray-600 dark:text-gray-300">Network summary</h2>
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-cyan-400">Network Summary</h2>
           <span class="network-health text-xs text-gray-500 dark:text-gray-400"></span>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <div><div class="text-xs text-gray-500 dark:text-gray-400">Queries</div><div class="network-total font-semibold text-blue-500">--</div></div>
-          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div><div class="network-blocked font-semibold text-red-500">--</div></div>
-          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked %</div><div class="network-percent font-semibold text-yellow-600 dark:text-yellow-500">--%</div></div>
-          <div><div class="text-xs text-gray-500 dark:text-gray-400">Cached / Forwarded</div><div class="network-cache font-semibold text-indigo-500">-- / --</div></div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem" class="text-sm">
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Queries</div><div class="network-total font-medium text-blue-500">--</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div><div class="network-blocked font-medium text-red-500">--</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked %</div><div class="network-percent font-medium text-yellow-600 dark:text-yellow-500">--%</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Cached / Forwarded</div><div class="network-cache font-medium text-indigo-500">-- / --</div></div>
         </div>
       </section>
 
