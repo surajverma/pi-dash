@@ -24,8 +24,7 @@
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Pi-Dash</h1>
         <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400">Last updated: Never</p>
       </header>
-
-      <section id="network-summary" class="hidden bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
+      <section id="network-summary" style="display:none" class="bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
         <div class="flex justify-between items-baseline mb-3">
           <h2 class="text-sm font-semibold text-gray-700 dark:text-cyan-400">Network Summary</h2>
           <span class="network-health text-xs text-gray-500 dark:text-gray-400"></span>
@@ -37,7 +36,6 @@
           <div><div class="text-xs text-gray-500 dark:text-gray-400">Cached / Forwarded</div><div class="network-cache font-medium text-indigo-500">-- / --</div></div>
         </div>
       </section>
-
       <main class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4"></main>
     </div>
     <ul id="background-queries" aria-hidden="true"></ul>
