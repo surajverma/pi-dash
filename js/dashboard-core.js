@@ -31,8 +31,7 @@
 
   function healthPresentation(meta = {}, hasError = false) {
     if (hasError || meta.health === 'auth_error') {
-      if (meta.health === 'auth_error') return { state: 'danger', text: 'Auth failed' };
-      return { state: 'danger', text: 'Offline' };
+      return { state: 'danger', text: meta.health === 'auth_error' ? 'Auth failed' : 'Offline' };
     }
     if (meta.health === 'unreachable') return { state: 'danger', text: 'Offline' };
     if (meta.blocking === false || meta.health === 'blocking_disabled') {
@@ -56,18 +55,17 @@
     return parts.join(' · ');
   }
 
+  function queryTimestamp(query) {
+    return finite(query.time ?? query.timestamp, 0);
+  }
+
   function queryIdentity(query) {
     const id = query.id;
     if (id !== null && id !== undefined && id !== '' && Number.isFinite(Number(id))) {
       return `id:${String(id)}`;
     }
-    // Fallback for older APIs without IDs. Include type and client so that
-    // simultaneous A/AAAA or different-client requests are not conflated.
-    return `time:${query.time ?? query.timestamp ?? ''}|${query.type ?? ''}|${query.client ?? ''}|${query.domain ?? ''}|${query.blocked ? 1 : 0}`;
-  }
-
-  function queryTimestamp(query) {
-    return finite(query.time ?? query.timestamp, 0);
+    const client = typeof query.client === 'object' ? query.client?.ip : query.client;
+    return JSON.stringify(['time', query.time ?? query.timestamp ?? '', query.type ?? '', client ?? '', query.domain ?? '', Boolean(query.blocked)]);
   }
 
   function queryKey(query) {
@@ -83,11 +81,8 @@
     for (const event of events) {
       const key = queryKey(event);
       const previous = groups[groups.length - 1];
-      if (previous && previous.key === key) {
-        previous.count += 1;
-      } else {
-        groups.push({ key, label: queryLabel(event), blocked: Boolean(event.blocked), count: 1 });
-      }
+      if (previous && previous.key === key) previous.count += 1;
+      else groups.push({ key, label: queryLabel(event), blocked: Boolean(event.blocked), count: 1 });
     }
     return groups;
   }
@@ -111,15 +106,12 @@
     let order = 0;
     for (const [piholeName, queries] of Object.entries(allQueries || {})) {
       if (!Array.isArray(queries)) continue;
-      let cursor = tracker.cursors.get(piholeName);
-      if (!cursor) cursor = { id: null, time: -Infinity };
-      let seen = tracker.seen.get(piholeName);
-      if (!seen) seen = new Map();
+      let cursor = tracker.cursors.get(piholeName) || { id: null, time: -Infinity };
+      let seen = tracker.seen.get(piholeName) || new Map();
       const valid = queries.filter(q => q && typeof q === 'object');
-      const ids = valid.map(q => Number(q.id)).filter((id, i) => valid[i]?.id != null && Number.isFinite(id));
-      const newestTime = Math.max(cursor.time, ...valid.map(queryTimestamp));
-      // A Pi-hole database can restart its ID sequence. A newer timestamp
-      // with an entirely lower ID range indicates a reset, not old traffic.
+      const ids = valid.filter(q => q.id != null && q.id !== '' && Number.isFinite(Number(q.id))).map(q => Number(q.id));
+      const newestTime = valid.reduce((max, q) => Math.max(max, queryTimestamp(q)), cursor.time);
+      // A newer snapshot whose entire ID range is lower may indicate a DB reset.
       if (cursor.id !== null && ids.length && Math.max(...ids) < cursor.id && newestTime > cursor.time) {
         cursor = { id: null, time: cursor.time };
         seen = new Map();
@@ -130,11 +122,10 @@
         const identity = queryIdentity(query);
         const timestamp = queryTimestamp(query);
         const id = query.id != null && query.id !== '' && Number.isFinite(Number(query.id)) ? Number(query.id) : null;
-        const alreadySeen = seen.has(identity);
-        const isNew = id !== null
-          ? (cursor.id === null || id > cursor.id)
-          : timestamp > cursor.time;
-        if (isNew && !alreadySeen) incoming.push({ ...query, piholeName, __order: order++, __time: timestamp, __id: id ?? 0 });
+        const isNew = id !== null ? (cursor.id === null || id > cursor.id) : timestamp > cursor.time;
+        if (isNew && !seen.has(identity)) {
+          incoming.push({ ...query, piholeName, __order: order++, __time: timestamp, __id: id ?? 0 });
+        }
         seen.delete(identity);
         seen.set(identity, true);
         if (id !== null && (maxId === null || id > maxId)) maxId = id;
@@ -144,8 +135,7 @@
       tracker.cursors.set(piholeName, { id: maxId, time: maxTime });
       tracker.seen.set(piholeName, seen);
     }
-    // IDs belong to individual databases; timestamps provide cross-instance
-    // ordering, with source IDs used only to break ties within one instance.
+    // IDs are local to each Pi-hole database, never a cross-instance clock.
     incoming.sort((a, b) => a.__time - b.__time ||
       (a.piholeName === b.piholeName ? a.__id - b.__id : 0) || a.__order - b.__order);
     return incoming;
