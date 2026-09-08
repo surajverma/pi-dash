@@ -1,381 +1,252 @@
 document.addEventListener('DOMContentLoaded', () => {
-  let refreshIntervalId = null;
-  let stalenessIntervalId = null;
+  let statsTimer = null;
+  let queriesTimer = null;
+  let stalenessTimer = null;
   let appConfig = null;
-  let isFetching = false;
+  let statsFetching = false;
+  let queriesFetching = false;
   let lastUpdateTime = null;
   let queryFeedPaused = false;
   const lastCursorByPihole = {};
+  const trendHistory = {};
+  const MAX_TREND_POINTS = 30;
 
   async function fetchData(url) {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
   }
 
-  function processSummaryData(summaryData) {
-    if (!summaryData || !summaryData.queries) {
-      return {
-        total: 0,
-        blocked: 0,
-        percentage: 0,
-        clients: 0,
-        rate: 0,
-        cached: 0,
-        forwarded: 0,
-        unique: 0,
-        domains: 0,
-      };
-    }
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
 
-    const queries = summaryData.queries;
-    const clients = summaryData.clients;
-    const gravity = summaryData.gravity;
-
+  function summaryStats(raw) {
+    if (!raw || !raw.queries) return { total: 0, blocked: 0, percentage: 0, clients: 0, rate: 0, cached: 0, forwarded: 0, unique: 0, domains: 0 };
+    const q = raw.queries || {};
+    const clients = raw.clients || {};
+    const gravity = raw.gravity || {};
     return {
-      total: Number(queries.total) || 0,
-      blocked: Number(queries.blocked) || 0,
-      percentage: Number(queries.percent_blocked) || 0,
+      total: Number(q.total) || 0,
+      blocked: Number(q.blocked) || 0,
+      percentage: Number(q.percent_blocked) || 0,
       clients: Number(clients.active) || 0,
-      rate: Number(queries.frequency) || 0,
-      cached: Number(queries.cached) || 0,
-      forwarded: Number(queries.forwarded) || 0,
-      unique: Number(queries.unique_domains) || 0,
+      rate: Number(q.frequency) || 0,
+      cached: Number(q.cached) || 0,
+      forwarded: Number(q.forwarded) || 0,
+      unique: Number(q.unique_domains) || 0,
       domains: Number(gravity.domains_being_blocked) || 0,
     };
   }
 
-  async function updatePiholeUI(piholeName, rawData) {
-    const section = document.getElementById(`pihole-${piholeName}-section`);
+  function healthPresentation(meta = {}, hasError = false) {
+    if (hasError || meta.health === 'unreachable' || meta.health === 'auth_error') return { dot: 'bg-red-500', text: meta.health === 'auth_error' ? 'Auth failed' : 'Offline', textClass: 'text-red-500' };
+    if (meta.blocking === false) return { dot: 'bg-yellow-500', text: 'Blocking OFF', textClass: 'text-yellow-600 dark:text-yellow-500' };
+    if (meta.health === 'slow') return { dot: 'bg-yellow-500', text: 'Slow', textClass: 'text-yellow-600 dark:text-yellow-500' };
+    return { dot: 'bg-green-500', text: meta.blocking === true ? 'Blocking ON' : 'Online', textClass: 'text-green-600 dark:text-green-500' };
+  }
+
+  function addTrend(name, value) {
+    if (!trendHistory[name]) trendHistory[name] = [];
+    trendHistory[name].push(value);
+    if (trendHistory[name].length > MAX_TREND_POINTS) trendHistory[name].shift();
+  }
+
+  function renderSparkline(name, el) {
+    if (!el || !appConfig.show_trends) return;
+    const values = trendHistory[name] || [];
+    if (values.length < 2) { el.innerHTML = ''; return; }
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const points = values.map((v, i) => `${(i / (values.length - 1)) * 100},${24 - ((v - min) / range) * 20}`).join(' ');
+    el.innerHTML = `<svg viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>`;
+  }
+
+  function updatePiholeUI(name, raw) {
+    const section = document.getElementById(`pihole-${CSS.escape(name)}-section`);
     if (!section) return;
+    const meta = raw?._pi_dash || {};
+    const hasError = !!raw?.error;
+    const status = healthPresentation(meta, hasError);
+    const dot = section.querySelector('.status-dot');
+    const health = section.querySelector('.pihole-health');
+    const latency = section.querySelector('.pihole-latency');
+    dot.className = `status-dot ${status.dot}`;
+    health.className = `pihole-health text-xs ${status.textClass}`;
+    health.textContent = status.text;
+    latency.textContent = Number.isFinite(Number(meta.latency_ms)) ? `${Number(meta.latency_ms).toFixed(0)} ms` : '-- ms';
 
-    const nameEl = section.querySelector('.pihole-name');
-    const rateEl = section.querySelector('.pihole-rate');
-    const totalEl = section.querySelector('.pihole-total');
-    const blockedEl = section.querySelector('.pihole-blocked');
-    const percentEl = section.querySelector('.pihole-percent');
-    const clientsEl = section.querySelector('.pihole-clients');
-    const statusDotEl = section.querySelector('.status-dot');
-    const cacheEl = section.querySelector('.pihole-cache');
-    const uniqueEl = section.querySelector('.pihole-unique');
-    const domainsEl = section.querySelector('.pihole-domains');
-
-    try {
-      if (rawData.error) throw new Error(rawData.error);
-
-      const stats = processSummaryData(rawData);
-
-      let rateValue;
-      let rateUnit;
-      if (stats.rate < 1.0) {
-        rateValue = (stats.rate * 60).toFixed(1);
-        rateUnit = '/min';
-      } else {
-        rateValue = stats.rate.toFixed(1);
-        rateUnit = '/sec';
-      }
-      if (rateEl) {
-        rateEl.textContent = `(${rateValue}${rateUnit})`;
-        rateEl.classList.remove('text-gray-500', 'dark:text-gray-400');
-        rateEl.classList.add('text-teal-500', 'dark:text-teal-400');
-      } else {
-        
-        nameEl.innerHTML = `${piholeName} <span class="text-sm font-normal text-teal-500 dark:text-teal-400">(${rateValue}${rateUnit})</span>`;
-      }
-
-      totalEl.textContent = stats.total.toLocaleString();
-      blockedEl.textContent = stats.blocked.toLocaleString();
-      percentEl.textContent = `${stats.percentage.toFixed(1)}%`;
-      clientsEl.textContent = stats.clients.toLocaleString();
-      cacheEl.textContent = `${stats.cached.toLocaleString()} / ${stats.forwarded.toLocaleString()}`;
-      uniqueEl.textContent = stats.unique.toLocaleString();
-      domainsEl.textContent = stats.domains.toLocaleString();
-
-      statusDotEl.classList.remove('bg-gray-500', 'bg-red-500');
-      statusDotEl.classList.add('bg-green-500');
-    } catch (error) {
-      console.error(`Failed to update Pi-hole ${piholeName} data:`, error);
-      if (rateEl) {
-        rateEl.textContent = `(--/sec)`;
-        rateEl.classList.remove('text-teal-500', 'dark:text-teal-400');
-        rateEl.classList.add('text-gray-500', 'dark:text-gray-400');
-      } else {
-        nameEl.innerHTML = `${piholeName} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">(--/sec)</span>`;
-      }
-      [totalEl, blockedEl, clientsEl, uniqueEl, domainsEl].forEach((el) => (el.textContent = '--'));
-      percentEl.textContent = '--%';
-      cacheEl.textContent = '-- / --';
-      statusDotEl.classList.remove('bg-gray-500', 'bg-green-500');
-      statusDotEl.classList.add('bg-red-500');
+    if (hasError) {
+      section.querySelectorAll('[data-metric]').forEach(el => el.textContent = el.dataset.metric === 'percent' ? '--%' : '--');
+      section.querySelector('.pihole-cache').textContent = '-- / --';
+      section.querySelector('.pihole-rate').textContent = '(--/sec)';
+      return;
     }
+
+    const s = summaryStats(raw);
+    let rateValue, rateUnit;
+    if (s.rate < 1) { rateValue = (s.rate * 60).toFixed(1); rateUnit = '/min'; }
+    else { rateValue = s.rate.toFixed(1); rateUnit = '/sec'; }
+    section.querySelector('.pihole-rate').textContent = `(${rateValue}${rateUnit})`;
+    section.querySelector('.pihole-total').textContent = s.total.toLocaleString();
+    section.querySelector('.pihole-blocked').textContent = s.blocked.toLocaleString();
+    section.querySelector('.pihole-percent').textContent = `${s.percentage.toFixed(1)}%`;
+    section.querySelector('.pihole-clients').textContent = s.clients.toLocaleString();
+    section.querySelector('.pihole-cache').textContent = `${s.cached.toLocaleString()} / ${s.forwarded.toLocaleString()}`;
+    section.querySelector('.pihole-unique').textContent = s.unique.toLocaleString();
+    section.querySelector('.pihole-domains').textContent = s.domains.toLocaleString();
+    addTrend(name, s.rate);
+    renderSparkline(name, section.querySelector('.pihole-sparkline'));
+  }
+
+  function updateNetworkSummary(summary) {
+    const el = document.getElementById('network-summary');
+    if (!el || !appConfig.show_network_summary || !summary) return;
+    el.classList.remove('hidden');
+    el.querySelector('.network-total').textContent = Number(summary.total_queries || 0).toLocaleString();
+    el.querySelector('.network-blocked').textContent = Number(summary.blocked_queries || 0).toLocaleString();
+    el.querySelector('.network-percent').textContent = `${Number(summary.percent_blocked || 0).toFixed(1)}%`;
+    el.querySelector('.network-cache').textContent = `${Number(summary.cached_queries || 0).toLocaleString()} / ${Number(summary.forwarded_queries || 0).toLocaleString()}`;
+    const parts = [];
+    if (summary.healthy_instances) parts.push(`${summary.healthy_instances} healthy`);
+    if (summary.slow_instances) parts.push(`${summary.slow_instances} slow`);
+    if (summary.offline_instances) parts.push(`${summary.offline_instances} offline`);
+    el.querySelector('.network-health').textContent = parts.join(' · ') || 'No active Pi-holes';
   }
 
   function updateTimestamp() {
     lastUpdateTime = Date.now();
-    const timestampEl = document.getElementById('last-updated');
-    const now = new Date();
-    timestampEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
-    timestampEl.classList.remove('text-yellow-600', 'dark:text-yellow-500');
-    timestampEl.classList.add('text-gray-500', 'dark:text-gray-400');
+    const el = document.getElementById('last-updated');
+    el.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    el.className = 'text-xs text-gray-500 dark:text-gray-400';
   }
 
-  function updateStalenessIndicator() {
+  function updateStaleness() {
     if (!lastUpdateTime || !appConfig) return;
-    const timestampEl = document.getElementById('last-updated');
-    if (!timestampEl) return;
-    const elapsed = Date.now() - lastUpdateTime;
-    const threshold = (appConfig.refresh_interval || 5000) * 2;
-    if (elapsed > threshold) {
-      timestampEl.classList.add('text-yellow-600', 'dark:text-yellow-500');
-      timestampEl.classList.remove('text-gray-500', 'dark:text-gray-400');
+    if (Date.now() - lastUpdateTime > (appConfig.refresh_interval || 5000) * 2) {
+      document.getElementById('last-updated').className = 'text-xs text-yellow-600 dark:text-yellow-500';
     }
   }
 
-  async function refreshDashboard() {
-    if (isFetching) return;
-    isFetching = true;
+  async function refreshStats() {
+    if (statsFetching) return;
+    statsFetching = true;
     try {
-      
-  const includeQueries = appConfig && appConfig.show_queries;
-  const endpoint = includeQueries ? 'data?include_queries=true&length=50' : 'data';
-      const data = await fetchData(endpoint);
-      
-      
-      const statsData = data.stats || data;
-      const queriesData = data.queries;
-      
-      
-      for (const [piholeName, piholeData] of Object.entries(statsData)) {
-        await updatePiholeUI(piholeName, piholeData);
-      }
+      const payload = await fetchData('data?include_summary=true');
+      for (const [name, raw] of Object.entries(payload.stats || {})) updatePiholeUI(name, raw);
+      updateNetworkSummary(payload.summary);
       updateTimestamp();
-      
-      
-      if (queriesData) {
-        renderQueries(queriesData);
-      }
-    } catch (error) {
-      console.error('Failed to refresh dashboard:', error);
-    } finally {
-      isFetching = false;
-    }
+    } catch (e) {
+      console.error('Failed to refresh stats:', e);
+    } finally { statsFetching = false; }
   }
 
-  function startTimer() {
-    if (refreshIntervalId || !appConfig) return;
-    const interval = appConfig.refresh_interval || 5000;
-    refreshIntervalId = setInterval(refreshDashboard, interval);
-    stalenessIntervalId = setInterval(updateStalenessIndicator, 1000);
+  async function refreshQueries() {
+    if (!appConfig?.show_queries || queriesFetching) return;
+    queriesFetching = true;
+    try { renderQueries(await fetchData('queries?length=50')); }
+    catch (e) { console.error('Failed to refresh queries:', e); }
+    finally { queriesFetching = false; }
   }
 
-  function stopTimer() {
-    clearInterval(refreshIntervalId);
-    refreshIntervalId = null;
-    clearInterval(stalenessIntervalId);
-    stalenessIntervalId = null;
+  function startTimers() {
+    if (!appConfig) return;
+    if (!statsTimer) statsTimer = setInterval(refreshStats, appConfig.refresh_interval || 5000);
+    if (appConfig.show_queries && !queriesTimer) queriesTimer = setInterval(refreshQueries, appConfig.queries_refresh_interval || appConfig.refresh_interval || 5000);
+    if (!stalenessTimer) stalenessTimer = setInterval(updateStaleness, 1000);
+  }
+
+  function stopTimers() {
+    clearInterval(statsTimer); clearInterval(queriesTimer); clearInterval(stalenessTimer);
+    statsTimer = queriesTimer = stalenessTimer = null;
   }
 
   function renderQueries(allQueries) {
     const container = document.getElementById('background-queries');
-    if (!container) return;
-    const isDark = document.documentElement.classList.contains('dark');
-    container.classList.toggle('dark-mode', isDark);
-
+    if (!container || queryFeedPaused) return;
     const newItems = [];
-    const pendingCursors = {};
-    for (const [piholeName, queries] of Object.entries(allQueries)) {
-      if (!Array.isArray(queries) || queries.length === 0) continue;
-      const lastCursor = lastCursorByPihole[piholeName] ?? -Infinity;
-      let maxCursor = lastCursor;
-      for (let i = 0; i < queries.length; i++) {
-        const q = queries[i];
-        const id = (q.id !== undefined && q.id !== null) ? Number(q.id) : null;
-        const timeVal = (q.time !== undefined && q.time !== null) ? Number(q.time) : (q.timestamp ? Number(q.timestamp) : null);
-        const cursor = (id !== null) ? id : (timeVal !== null ? timeVal : -Infinity);
-        if (cursor > lastCursor) {
-          newItems.push({ piholeName, ...q, __cursor: cursor });
-        }
-        if (cursor > maxCursor) maxCursor = cursor;
+    const pending = {};
+    for (const [name, queries] of Object.entries(allQueries || {})) {
+      if (!Array.isArray(queries)) continue;
+      const last = lastCursorByPihole[name] ?? -Infinity;
+      let max = last;
+      for (const q of queries) {
+        const id = q.id !== null && q.id !== undefined ? Number(q.id) : null;
+        const time = q.time !== null && q.time !== undefined ? Number(q.time) : null;
+        const cursor = id !== null ? id : (time !== null ? time : -Infinity);
+        if (cursor > last) newItems.push({ ...q, piholeName: name, __cursor: cursor });
+        if (cursor > max) max = cursor;
       }
-      pendingCursors[piholeName] = maxCursor;
+      pending[name] = max;
     }
-
-    if (newItems.length === 0) return;
-    if (queryFeedPaused) return;
-
-    // Commit cursor advances only now that we know we will render
-    Object.assign(lastCursorByPihole, pendingCursors);
-
-    newItems.sort((a, b) => a.__cursor - b.__cursor);
-
-    const groups = [];
-    for (let i = 0; i < newItems.length; i++) {
-      const item = newItems[i];
-      const domain = item.domain || '';
-      const piholeName = item.piholeName || '';
-      const label = `[${piholeName}] ${domain}`;
-      const blocked = !!item.blocked;
-      if (groups.length > 0 && groups[groups.length - 1].label === label) {
-        const g = groups[groups.length - 1];
-        g.count += 1;
-        g.blocked = g.blocked || blocked;
-      } else {
-        groups.push({ label, domain, piholeName, blocked, count: 1 });
-      }
+    if (!newItems.length) return;
+    Object.assign(lastCursorByPihole, pending);
+    newItems.sort((a,b) => a.__cursor - b.__cursor);
+    for (const item of newItems) {
+      const li = document.createElement('li');
+      li.className = `query-row ${item.blocked ? 'text-red-600 dark:text-red-500' : 'text-green-600 dark:text-green-500'}`;
+      li.textContent = `[${item.piholeName}] ${item.domain || ''}`;
+      container.appendChild(li);
     }
+    while (container.children.length > 100) container.removeChild(container.firstChild);
+  }
 
-    const MAX_ROWS = 100;
-    for (let index = 0; index < groups.length; index++) {
-      const group = groups[index];
-      const lastLi = container.lastElementChild;
-      if (lastLi && lastLi.dataset && lastLi.dataset.label === group.label) {
-        const prev = Number(lastLi.dataset.count || '1');
-        const nextCount = prev + group.count;
-        lastLi.dataset.count = String(nextCount);
-        lastLi.textContent = `${group.label} (x${nextCount})`;
-        if (group.blocked) {
-          lastLi.classList.remove('text-green-600', 'dark:text-green-500');
-          lastLi.classList.add('text-red-600', 'dark:text-red-500');
-          lastLi.style.filter = 'drop-shadow(0 0 2px rgba(220, 38, 38, 0.3))';
-        }
-      } else {
-        const li = document.createElement('li');
-        li.className = 'opacity-0 translate-y-1 text-[10px] leading-tight px-1 whitespace-nowrap';
-        li.style.textOverflow = 'ellipsis';
-        li.dataset.label = group.label;
-        li.dataset.count = String(group.count);
-        li.textContent = group.count > 1 ? `${group.label} (x${group.count})` : group.label;
-        if (group.blocked) {
-          li.classList.add('text-red-600', 'dark:text-red-500');
-          li.style.filter = 'drop-shadow(0 0 2px rgba(220, 38, 38, 0.3))';
-        } else {
-          li.classList.add('text-green-600', 'dark:text-green-500');
-          li.style.filter = 'drop-shadow(0 0 2px rgba(22, 163, 74, 0.25))';
-        }
-        const delay = Math.min(index * 15, 300);
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            li.style.transition = 'opacity .3s ease, transform .3s ease';
-            li.style.opacity = '0.9';
-            li.style.transform = 'translateY(0)';
-          });
-        }, delay);
-        container.appendChild(li);
-      }
-    }
-
-    while (container.children.length > MAX_ROWS) {
-      container.removeChild(container.firstChild);
-    }
+  function createCard(p) {
+    const section = document.createElement('section');
+    section.id = `pihole-${p.name}-section`;
+    section.className = 'bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full';
+    const safeName = escapeHtml(p.name);
+    const name = p.link ? `<a href="${escapeHtml(p.address)}/admin" target="_blank" rel="noopener noreferrer" class="hover:text-teal-500">${safeName}</a>` : safeName;
+    section.innerHTML = `
+      <div class="flex justify-between gap-3 mb-3">
+        <div><h2 class="text-xl font-semibold text-gray-700 dark:text-cyan-400">${name} <span class="pihole-rate text-sm font-normal text-gray-500 dark:text-gray-400">(--/sec)</span></h2><div class="flex gap-2 items-center"><span class="status-dot bg-gray-500"></span><span class="pihole-health text-xs text-gray-500">Checking</span><span class="pihole-latency text-xs text-gray-400">-- ms</span></div></div>
+        <div class="pihole-sparkline text-teal-500 w-20 h-7"></div>
+      </div>
+      <div class="space-y-1.5 text-sm">
+        <div class="metric-row"><span>Total Queries</span><span data-metric="total" class="pihole-total text-blue-500">--</span></div>
+        <div class="metric-row"><span>Queries Blocked</span><span data-metric="blocked" class="pihole-blocked text-red-500">--</span></div>
+        <div class="metric-row"><span>Percent Blocked</span><span data-metric="percent" class="pihole-percent text-yellow-600 dark:text-yellow-500">--%</span></div>
+        <div class="metric-row"><span>Cached / Forwarded</span><span class="pihole-cache text-indigo-500">-- / --</span></div>
+        <div class="metric-row"><span>Unique Domains</span><span data-metric="unique" class="pihole-unique text-orange-500">--</span></div>
+        <div class="metric-row"><span>Active Clients</span><span data-metric="clients" class="pihole-clients text-purple-500">--</span></div>
+        <div class="metric-row"><span>Domains on Lists</span><span data-metric="domains" class="pihole-domains text-green-600 dark:text-green-500">--</span></div>
+      </div>`;
+    return section;
   }
 
   async function init() {
     try {
-      
-      const initData = await fetchData('init');
-      appConfig = initData.config;
-      
-      const mainContent = document.querySelector('main');
-      mainContent.innerHTML = '';
-
-      const enabledPiholes = appConfig.piholes.filter((p) => p.enabled);
-
-      
-      enabledPiholes.forEach((pihole) => {
-        const section = document.createElement('section');
-        section.id = `pihole-${pihole.name}-section`;
-        section.className = 'bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full';
-        
-        const nameContent = pihole.link
-          ? `<a href="${pihole.address}/admin" target="_blank" rel="noopener noreferrer" class="hover:text-teal-500 focus:text-teal-500 outline-none transition-colors" aria-label="Open ${pihole.name} Pi-hole UI">${pihole.name}</a>`
-          : `${pihole.name}`;
-        section.innerHTML = `
-                  <div class="flex justify-between items-baseline mb-3">
-                      <h2 class="text-xl font-semibold text-gray-700 dark:text-cyan-400 pihole-name">${nameContent} <span class="pihole-rate text-sm font-normal text-gray-500 dark:text-gray-400">(--/sec)</span></h2>
-                      <span class="status-dot bg-gray-500"></span>
-                  </div>
-                  <div class="space-y-1.5 text-sm">
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Total Queries</span>
-                          <span class="font-medium text-blue-500 dark:text-blue-400 pihole-total">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Queries Blocked</span>
-                          <span class="font-medium text-red-500 dark:text-red-400 pihole-blocked">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Percent Blocked</span>
-                          <span class="font-medium text-yellow-600 dark:text-yellow-500 pihole-percent">--%</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Cachd / Fwded</span>
-                          <span class="font-medium text-indigo-500 dark:text-indigo-400 pihole-cache">-- / --</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Unique Domains</span>
-                          <span class="font-medium text-orange-500 dark:text-orange-400 pihole-unique">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Active Clients</span>
-                          <span class="font-medium text-purple-500 dark:text-purple-400 pihole-clients">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Domains on Lists</span>
-                          <span class="font-medium text-green-600 dark:text-green-500 pihole-domains">--</span>
-                      </div>
-                  </div>
-              `;
-        mainContent.appendChild(section);
-      });
-
-      
-      for (const [piholeName, piholeData] of Object.entries(initData.data)) {
-        await updatePiholeUI(piholeName, piholeData);
-      }
+      const data = await fetchData('init');
+      appConfig = data.config;
+      const main = document.querySelector('main');
+      main.innerHTML = '';
+      for (const p of appConfig.piholes || []) main.appendChild(createCard(p));
+      for (const [name, raw] of Object.entries(data.data || {})) updatePiholeUI(name, raw);
+      updateNetworkSummary(data.summary);
+      if (data.queries) renderQueries(data.queries);
       updateTimestamp();
-
-      if (initData.queries) {
-        renderQueries(initData.queries);
-      }
-
-      startTimer();
-    } catch (error) {
-      console.error('Failed to initialize dashboard:', error);
+      startTimers();
+    } catch (e) {
+      console.error('Failed to initialize dashboard:', e);
+      document.getElementById('last-updated').textContent = 'Unable to initialize dashboard';
     }
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      stopTimer();
-    } else {
-      refreshDashboard();
-      startTimer();
-    }
+    if (document.hidden) stopTimers();
+    else { refreshStats(); refreshQueries(); startTimers(); }
   });
-
-  window.addEventListener('offline', () => stopTimer());
-  window.addEventListener('online', () => { refreshDashboard(); startTimer(); });
-
-  const queriesContainer = document.getElementById('background-queries');
-  if (queriesContainer) {
-    queriesContainer.addEventListener('mouseenter', () => { queryFeedPaused = true; });
-    queriesContainer.addEventListener('mouseleave', () => { queryFeedPaused = false; });
-  }
-
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').then(
-        (registration) => {
-          console.log('ServiceWorker registration successful with scope: ', registration.scope);
-        },
-        (err) => {
-          console.log('ServiceWorker registration failed: ', err);
-        }
-      );
-    });
-  }
-
+  window.addEventListener('offline', stopTimers);
+  window.addEventListener('online', () => { refreshStats(); refreshQueries(); startTimers(); });
+  const queries = document.getElementById('background-queries');
+  queries?.addEventListener('mouseenter', () => { queryFeedPaused = true; });
+  queries?.addEventListener('mouseleave', () => { queryFeedPaused = false; });
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.error));
   init();
 });
