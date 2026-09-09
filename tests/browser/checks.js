@@ -79,6 +79,28 @@ async function checkLayout(width, height, scenario, dark) {
   assert(shown(d.querySelector('#background-queries')), 'query feed did not open');
   geometry(d, 'queries open');
   if (scenario !== 'zero') assert(d.querySelector('#background-queries').textContent.includes('(x3)'), 'consecutive grouping missing');
+  if (scenario !== 'zero') {
+    // A short initial feed fits; reproduce a full feed after repeated 50-query polls.
+    const fixture = frame.contentWindow.fixture;
+    const name = Object.keys(fixture.queries)[0];
+    for (const start of [100, 150]) {
+      fixture.queries[name] = Array.from({length: 50}, (_, i) => ({
+        id: start + i, time: start + i, domain: `busy-${start + i}.example.org`, blocked: i % 3 === 0,
+      }));
+      await fixture.tick(3000);
+    }
+    const rows = [...d.querySelectorAll('#background-queries li')];
+    assert(rows.length === 100, 'full feed did not retain its bounded 100 rows');
+    for (const row of rows) {
+      const lineHeight = parseFloat(d.defaultView.getComputedStyle(row).lineHeight);
+      assert(bounds(row).height >= lineHeight - .1, `full feed shrinks rows below line height: ${bounds(row).height} < ${lineHeight}`);
+    }
+    if (!compact) {
+      const list = bounds(d.querySelector('#background-queries'));
+      assert(bounds(rows.at(-1)).bottom <= list.bottom + 1 && bounds(rows.at(-1)).top >= list.top, 'newest query is not visible');
+    }
+    geometry(d, 'full query feed');
+  }
   if (scenario === 'states') {
     for (const state of ['Blocking ON', 'Blocking OFF', 'Offline', 'Auth failed', 'blocking unknown']) assert(d.querySelector('main').textContent.includes(state), `missing ${state}`);
     assert(shown(d.querySelector('.network-partial')), 'missing partial summary');

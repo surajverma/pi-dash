@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-dashboard-cache-v4-desktop-background';
+const CACHE_NAME = 'pi-dashboard-cache-v5-query-row-height';
 const APP_SHELL = [
   '{{CACHE_URL}}',
   '{{CACHE_URL}}css/style.css',

@@ -52,7 +52,8 @@ html, body { overscroll-behavior-y: contain; }
 .query-panel { position: fixed; inset: auto 0 0; height: 60vh; max-height: 60vh; z-index: 0; pointer-events: none; }
 .query-panel-header { display: none; }
 #background-queries { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; list-style: none; margin: 0; padding: 4px 6px 8px; overflow: hidden; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 10px; line-height: 1.25; pointer-events: auto; -webkit-mask-image: linear-gradient(to top, #000 0%, #000 50%, #0008 80%, transparent 100%); mask-image: linear-gradient(to top, #000 0%, #000 50%, #0008 80%, transparent 100%); }
-#background-queries li { text-shadow: 0 1px 2px rgb(0 0 0 / .15); letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Keep full line boxes when the bounded feed fills; older rows leave the top. */
+#background-queries li { flex-shrink: 0; text-shadow: 0 1px 2px rgb(0 0 0 / .15); letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .query-allowed { color: #16a34a; }
 .query-blocked { color: #dc2626; }
 .dark .query-allowed { color: #4ade80; }

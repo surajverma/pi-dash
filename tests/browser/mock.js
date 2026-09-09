@@ -45,6 +45,12 @@
     });
     realSetInterval(report, 250);
   });
+  if (scenario === 'busy') document.addEventListener('DOMContentLoaded', () => setTimeout(async () => {
+    for (const start of [100, 150]) {
+      queries[names[0]] = Array.from({length: 50}, (_, i) => ({id: start + i, time: start + i, domain: `busy-${start + i}.example.org`, blocked: i % 3 === 0}));
+      await window.fixture.tick(3000);
+    }
+  }, 50));
   window.fixture = {
     timers, calls, data, queries, summary,
     hide(value) { hidden = value; document.dispatchEvent(new Event('visibilitychange')); },

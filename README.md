@@ -36,7 +36,7 @@ Desktop keeps the original 576-pixel-wide dashboard, full metric cards, query ra
 
 Compact mode applies below 768 CSS pixels wide, and also at up to 1024 pixels wide when the viewport is 500 pixels high or less (including phone landscape and short resized windows). Below 640 pixels, cards use one column; wider layouts use two. Each details button has an instance-specific accessible name, supports keyboard activation, and preserves its expanded state when resizing.
 
-In compact mode, the query feed occupies its own space below the cards in a collapsible panel with a bounded scrolling area and a Pause control. Desktop retains the original fixed background feed, bottom alignment and fade; it stays behind the opaque cards and pauses on hover. Long values and names wrap instead of overflowing. Short desktop dashboards are centered safely; taller dashboards scroll from the top without clipping the heading or Network Summary. Full details and larger instance lists can require vertical scrolling.
+In compact mode, the query feed occupies its own space below the cards in a collapsible panel with a bounded scrolling area and a Pause control. Desktop retains the original fixed background feed, bottom alignment and fade. Query rows keep their full line height as the feed fills, with older rows leaving the top instead of every row being compressed; it stays behind the opaque cards and pauses on hover. Long values and names wrap instead of overflowing. Short desktop dashboards are centered safely; taller dashboards scroll from the top without clipping the heading or Network Summary. Full details and larger instance lists can require vertical scrolling.
 
 ### Why the latency number was removed
 
