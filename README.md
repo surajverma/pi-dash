@@ -4,60 +4,33 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/surajverma/pi-dash)](https://github.com/surajverma/pi-dash/commits/main)
 [![GitHub issues](https://img.shields.io/github/issues/surajverma/pi-dash)](https://github.com/surajverma/pi-dash/issues)
 [![GitHub Stars](https://img.shields.io/github/stars/surajverma/pi-dash?style=social)](https://github.com/surajverma/pi-dash/stargazers)
+[![Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Fsurajverma%2Fpi-dash&query=downloadCount&style=social&logo=github&label=Docker%20Pulls)](https://github.com/surajverma/pi-dash/pkgs/container/pi-dash)
 
 # Pi-Dash: A Minimalist Pi-hole Dashboard
 
-Pi-Dash is a lightweight dashboard for monitoring one or more Pi-hole instances. It intentionally stays focused on at-a-glance health and DNS activity instead of replacing the Pi-hole administration interface.
+Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole instances. It provides a clean, at-a-glance, responsive view of your Pi-hole statistics.
 
 ## Features
 
-- Multiple Pi-hole instances on one responsive dashboard
-- Compact mobile view with critical metrics and expandable full details for each instance
-- Desktop cards retain the full metrics layout and optional query-rate sparklines
-- Network-wide aggregate query, blocked, percentage, cache and forward counters
-- Clear partial totals when an instance is unavailable
-- Per-instance reachability, authentication and blocking ON/OFF status
-- Optional live DNS query feed with consecutive duplicate grouping, such as `(x2)` or `(x3)`
-- Independent statistics and query polling intervals
-- Foreground-only polling: hidden/offline browser pages stop their timers and abort pending browser requests
-- Shared in-process cache to reduce duplicate Pi-hole API traffic from multiple browser tabs/devices
-- Automatic session re-authentication
-- Optional TLS verification per Pi-hole
-- Environment-variable substitution for passwords and CA paths
-- PWA support with network-first application-shell updates
-- Dark mode, Docker amd64/arm64 support, and a `/health` endpoint
-- No external font dependency
+- **Multiple Pi-hole Support:** Monitor all your Pi-hole instances from a single dashboard.
+- **Network Summary:** View combined query, blocked, cached, and forwarded totals across reporting Pi-holes.
+- **Pi-hole Status:** See reachability, authentication errors, and blocking ON/OFF state for each instance.
+- **Responsive Design:** Desktop shows the full dashboard and ambient query feed. Mobile shows critical metrics in compact cards, with an accessible control to expand all available metrics.
+- **Live Query Feed:** Optionally show recent allowed and blocked domains. Consecutive duplicate queries are grouped with `(x2)`, `(x3)`, and similar counts.
+- **Configurable Refresh:** Set separate refresh intervals for statistics and queries. If the query interval is omitted, it uses the statistics interval.
+- **Efficient Polling:** Polling stops while the page is hidden or the browser is offline, then resumes safely when it becomes active again. A short shared cache reduces duplicate Pi-hole API requests.
+- **Lightweight and Fast:** Built with Flask and vanilla JavaScript, with no database or frontend framework.
+- **Dark Mode and PWA Support:** Works with your preferred color scheme and can be installed as a Progressive Web App.
 
 ![pi-dash-landscape](https://github.com/user-attachments/assets/a0e1fbef-279a-40df-9424-0cad50c31b50)
 
-## Mobile and desktop layout
-
-Desktop keeps the original 576-pixel-wide dashboard, full metric cards, query rates, sparklines and viewport-wide ambient query feed behind the cards. On narrow screens, Pi-Dash uses smaller spacing, a compact Network Summary, and a condensed card for each Pi-hole. The condensed card shows its name, query rate, health/blocking state, total queries, blocked queries and blocked percentage. Tap **Show details** to reveal all seven metrics shown on desktop; tap **Hide details** to collapse it again.
-
-Compact mode applies below 768 CSS pixels wide, and also at up to 1024 pixels wide when the viewport is 500 pixels high or less (including phone landscape and short resized windows). Below 640 pixels, cards use one column; wider layouts use two. Each details button has an instance-specific accessible name, supports keyboard activation, and preserves its expanded state when resizing.
-
-In compact mode, the query feed occupies its own space below the cards in a collapsible panel with a bounded scrolling area and a Pause control. Desktop retains the original fixed background feed, bottom alignment and fade. Query rows keep their full line height as the feed fills, with older rows leaving the top instead of every row being compressed; it stays behind the opaque cards and pauses on hover. Long values and names wrap instead of overflowing. Short desktop dashboards are centered safely; taller dashboards scroll from the top without clipping the heading or Network Summary. Full details and larger instance lists can require vertical scrolling.
-
-### Why the latency number was removed
-
-The previous API latency number measured the time required for an authenticated HTTP statistics request, not ICMP ping or DNS resolution time. Connection setup, TLS, authentication and API processing could make a healthy Pi-hole appear slow compared with a 2-3 ms ping. The number and the latency-based slow warning have been removed. Reachability and blocking state remain, without treating API response time as network speed.
-
-## Backward compatibility
-
-Existing `config.json` files continue to work without adding any new options. Do not replace your working configuration just to upgrade.
-
-- `refresh_interval` retains its existing meaning and historical 5000 ms code default.
-- If `queries_refresh_interval` is absent, it inherits the effective `refresh_interval`.
-- `verify_ssl` defaults to `false`, matching the previous behavior.
-- `/data` keeps its original response format unless a caller explicitly requests summary/query data.
-- New configuration keys are optional. The example values are recommendations, not mandatory defaults.
-- `python proxy.py` remains available for native use; Docker uses Gunicorn.
+<img width="2481" height="1477" alt="Pi-Dash dashboard" src="https://github.com/user-attachments/assets/e160cb8d-8dd9-49ac-801a-a95a34c254f7" />
 
 ## Configuration
 
-Copy `config-example.json` to `config.json` and edit the values for your network. The example is plain JSON without comments and matches the example below. The tables in this section explain every option and its code default. Passwords and TLS settings are never exposed in the frontend configuration.
+Copy `config-example.json` to `config.json` and edit it for your network. The example is valid JSON without comments; all options and their defaults are described below.
 
-You can delete any optional setting to use its code default. Existing installations do not need a migration.
+### 1. `config.json`
 
 ```json
 {
@@ -81,81 +54,72 @@ You can delete any optional setting to use its code default. Existing installati
 }
 ```
 
-### Dashboard options
+#### Dashboard options
 
-| Option | Code default | Purpose |
+| Option | Default | Description |
 | --- | --- | --- |
-| `base_path` | `/` | Subpath where Pi-Dash is hosted, for example `/pi-dash/` |
-| `refresh_interval` | `5000` | Main statistics refresh interval in milliseconds |
-| `queries_refresh_interval` | Effective `refresh_interval` | Independent live-query refresh interval in milliseconds |
-| `cache_ttl` | Derived automatically | Shared backend cache lifetime in milliseconds; `0` disables caching |
-| `show_queries` | `false` | Enable the optional live DNS query feed |
-| `show_network_summary` | `true` | Show combined additive DNS counters |
-| `show_trends` | `true` | Show short in-memory query-rate sparklines |
-| `piholes` | `[]` | List of Pi-hole instances to monitor |
+| `base_path` | `/` | Subpath where Pi-Dash is hosted, for example `/pi-dash/`. |
+| `refresh_interval` | `5000` | Statistics refresh interval in milliseconds. |
+| `queries_refresh_interval` | `refresh_interval` | Query-feed refresh interval in milliseconds. |
+| `cache_ttl` | Automatic | Shared backend cache lifetime in milliseconds. Set to `0` to disable caching. |
+| `show_queries` | `false` | Show the live DNS query feed. Allowed queries are green and blocked queries are red. |
+| `show_network_summary` | `true` | Show combined statistics from all reporting Pi-holes. |
+| `show_trends` | `true` | Show short, in-memory query-rate sparklines. |
+| `piholes` | `[]` | List of Pi-hole instances to monitor. |
 
-The example recommends 2000 ms for stats and 3000 ms for queries. If `cache_ttl` is omitted, the code chooses `min(1000, max(100, min(refresh_interval, queries_refresh_interval) // 2))` milliseconds. This is deliberately shorter than the fastest configured polling cadence. An explicitly configured cache lifetime can delay fresh upstream data, so keep it below the fastest interval if you want each refresh to be able to obtain a new snapshot.
+When `cache_ttl` is omitted, Pi-Dash calculates it as half of the shortest refresh interval, with a minimum of 100 ms and a maximum of 1000 ms. The values in `config-example.json` are recommended example settings; omitted options use the defaults above.
 
-### Pi-hole options
+#### Pi-hole options
 
-| Option | Code default | Purpose |
+| Option | Default | Description |
 | --- | --- | --- |
-| `name` | Required | Unique display name |
-| `address` | Required | Full Pi-hole base URL, including scheme and optional port; do not include `/admin` or `/api` |
-| `password` | Empty string | API/application password or `${ENV_NAME}` |
-| `enabled` | `true` | Include or exclude an instance without deleting its configuration |
-| `link` | `false` | Make the instance name open Pi-hole Admin |
-| `verify_ssl` | `false` | `true`, `false`, or a path to a trusted CA bundle |
+| `name` | Required | Display name for the Pi-hole. Names must be unique. |
+| `address` | Required | Full Pi-hole base URL, including the scheme and optional port. Do not include `/admin` or `/api`. |
+| `password` | Empty string | Pi-hole API/application password. Literal values and `${ENV_NAME}` references are supported. |
+| `enabled` | `true` | Set to `false` to hide and stop monitoring an instance without deleting it from the configuration. |
+| `link` | `false` | Make the Pi-hole name a link to its admin interface. |
+| `verify_ssl` | `false` | Set to `true` to verify trusted HTTPS certificates, or provide a CA bundle path. |
 
-`verify_ssl` remains false by default for compatibility with LAN installations that use self-signed certificates. If your Pi-hole uses a trusted HTTPS certificate, set it to true. You may also provide a CA bundle path, including an environment-variable reference.
-
-Passwords can be kept outside `config.json`:
+Settings omitted from `config.json` use the defaults above, so existing configurations continue to work. Passwords and CA bundle paths can reference environment variables:
 
 ```json
 "password": "${PIHOLE_PRIMARY_PASSWORD}"
 ```
 
-Provide the variable through your shell or Docker environment. An unset environment variable is left as its literal reference, not silently replaced with an empty password. Literal passwords remain supported for existing installations. Treat your configuration and environment files as secrets; do not commit real passwords to GitHub.
+Provide referenced variables through your shell or Docker environment. Literal passwords remain supported. Do not commit real passwords to GitHub.
 
-## Polling and query-feed behavior
+The Network Summary includes only additive DNS counters: total queries, blocked queries, cached queries, and forwarded queries. It does not combine active clients, unique domains, or domains on lists because those values can overlap between Pi-holes. If an instance is unavailable, the summary is marked as partial.
 
-Stats and recent queries are fetched separately. Opening the dashboard on multiple devices shares short-lived server-side snapshots through the in-process cache. The cache is demand-driven: Pi-Dash does not run a background polling service of its own.
+When the query feed is enabled, it displays recent queries while the dashboard is visible and online. Only consecutive entries with the same Pi-hole, domain, and blocked/allowed state are grouped. The feed is intended as a live overview; use Pi-hole's query log for complete history.
 
-The browser stops its statistics and query timers when the page becomes hidden or the device goes offline, and resumes when it becomes visible/online again. Pending browser requests are aborted, and stale responses or initialization errors cannot overwrite newer foreground state. Returning to a visible, online page refreshes immediately and starts only one timer for each feed. Going online while the page is still hidden does not resume polling. An upstream HTTP request already started by the server may still finish, but no repeated server-side polling continues after the browser stops requesting data.
+### 2. `manifest.json` (Optional)
 
-The feed fetches the latest 50 queries per Pi-hole on each poll. It tracks IDs separately for each instance and uses timestamps for cross-instance ordering. Actual duplicate DNS requests are legitimate and are not deleted from the API data. For display, only **consecutive** entries with the same Pi-hole, domain and blocked/allowed status are combined into `(xN)`. The last group can continue increasing across refreshes. A different domain or blocking status starts a new row. No rolling-window aggregation or top-domain ranking is used.
+This file contains the Progressive Web App name, colors, and icon:
 
-The query panel can be paused for reading. New events are held in a bounded browser-memory queue and displayed on resume; the feed does not maintain a permanent history. As with the previous implementation, bursts of more than 50 queries between polls can exceed the latest-query window, so this is an at-a-glance feed rather than a guaranteed complete DNS audit log. Use Pi-hole's query log for complete historical investigation.
+```json
+{
+  "name": "Pi-Dash",
+  "short_name": "Pi-Dash",
+  "description": "A simple dashboard to monitor Pi-hole status.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#06b6d4",
+  "icons": [
+    {
+      "src": "https://pi.hole/admin/img/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
+```
 
-The blocking enabled/disabled state is cached separately for 30 seconds. Therefore, a blocking-state change may take up to approximately 30 seconds (plus the next visible refresh) to appear.
+Replace `icons.src` with a direct link to your Pi-hole logo or preferred icon.
 
-## Network summary semantics
-
-Pi-Dash sums queries, blocked queries, cached queries and forwarded queries across reporting instances. The blocked percentage is calculated from the combined blocked and total counters. It deliberately does not sum active clients, unique domains or domains on lists, because those values may overlap across redundant Pi-holes.
-
-If an instance is unavailable, the summary is marked partial and displays how many instances are reporting. An instance with blocking disabled is not counted as healthy. If the blocking endpoint is unavailable, the dashboard distinguishes an online Pi-hole with unknown blocking status from one confirmed to be blocking.
-
-These are totals of DNS queries handled by the configured instances, not a deduplicated count of distinct network requests. They should not be interpreted as unique users or unique domains across the network.
+---
 
 ## Installation
-
-### Testing the development branch
-
-To test the changes without merging into `main`:
-
-```bash
-git fetch origin
-git switch feature/dashboard-hardening
-git pull --ff-only origin feature/dashboard-hardening
-# If the branch does not exist locally yet:
-# git switch --track origin/feature/dashboard-hardening
-```
-
-Keep a backup of your existing `config.json`. Do not overwrite it with the example. For Docker testing, build the branch locally and use a temporary image tag rather than assuming the published `latest` tag contains unmerged changes:
-
-```bash
-docker build -t pi-dash:testing .
-```
 
 ### Docker Compose
 
@@ -174,8 +138,6 @@ services:
     restart: unless-stopped
 ```
 
-For branch testing, replace the image with `pi-dash:testing` after building it locally. The container runs Gunicorn as a non-root user and includes a Docker healthcheck. The root `/health` endpoint remains available even when the dashboard itself is hosted below a configured `base_path`.
-
 ### Docker Run
 
 ```bash
@@ -183,64 +145,53 @@ docker run -d \
   --name pi-dash \
   -p 5001:5001 \
   -e PIHOLE_PRIMARY_PASSWORD='your_app_password_here' \
-  -v /path/to/config.json:/app/config.json:ro \
-  -v /path/to/manifest.json:/app/manifest.json:ro \
+  -v /path/to/pi-dash/config.json:/app/config.json:ro \
+  -v /path/to/pi-dash/manifest.json:/app/manifest.json:ro \
   ghcr.io/surajverma/pi-dash:latest
 ```
 
-### Native install
+### Native Install
 
-```bash
-git clone https://github.com/surajverma/pi-dash.git
-cd pi-dash
-cp config-example.json config.json
-python -m pip install -r requirements.txt
-python proxy.py
-```
+1. Clone the repository:
 
-Then open `http://localhost:5001`. On Windows, use `copy` instead of `cp`. The repository ships the responsive dashboard styles separately in `css/dashboard.css`, so you do not need a Node.js build just to use the new layout. If you are modifying Tailwind classes, run `npm install` followed by `npm run build:css`.
+   ```bash
+   git clone https://github.com/surajverma/pi-dash.git
+   cd pi-dash
+   ```
 
-## Health endpoint
+2. Create your configuration and install the dependencies:
 
-```text
-GET /health
-```
+   ```bash
+   cp config-example.json config.json
+   python -m pip install -r requirements.txt
+   ```
 
-Returns a small Pi-Dash process-health response without contacting every Pi-hole. This makes it suitable for Docker, Uptime Kuma, Homepage, Homarr and similar monitoring tools. It is not a substitute for checking individual DNS availability.
+   On Windows, use `copy config-example.json config.json` instead.
 
-## Tests
+3. Start Pi-Dash:
 
-The regression suite uses mocked Pi-hole responses and does not require a live Pi-hole:
+   ```bash
+   python proxy.py
+   ```
+
+Open `http://localhost:5001` in your browser.
+
+## Health Check
+
+`GET /health` reports whether the Pi-Dash application is running. It does not contact the configured Pi-hole instances.
+
+## Development
+
+The automated tests use mocked Pi-hole responses and do not require a live Pi-hole:
 
 ```bash
 python -m unittest discover -s tests -v
 npm install
 npm run test:js
 npm run build:css
-```
-
-Backend tests cover config fallback, cache behavior, zero enabled instances, TLS/secret resolution, reachability versus authentication errors, blocking states, partial aggregation, legacy API response shapes and process health. Frontend behavior tests use jsdom for grouping, expansion and deterministic request/timer races; **jsdom does not render CSS**.
-
-Run the separate Chromium suite to check the actual rendered page:
-
-```bash
 npx playwright install chromium
 npm run test:browser
 ```
-
-The rendered fixture loads the production HTML, CSS and JavaScript with synthetic API responses. It checks 320, 375, 430 and 768 pixel widths, phone landscape, intermediate desktop sizes and desktops up to 1920 pixels, in both themes. It covers compact and expanded cards, long values/names, six Pi-holes, zero Pi-holes, blocking/offline/auth states, feed grouping, original desktop width and background stacking, compact card/feed separation, page overflow, resizing and deterministic visibility/offline races. CI runs these checks and retains screenshots in the `rendered-dashboard` artifact. Playwright is a development-only dependency; Flask and vanilla JavaScript remain the application runtime.
-
-For manual visual and keyboard inspection with the same synthetic data:
-
-```bash
-npm run dev
-```
-
-Open `http://localhost:5011/tests/browser/`, select a viewport/scenario/theme, and use **Inspect viewport** or **Run all rendered checks**. This command is only a test fixture; use `python proxy.py` to run the real dashboard. Inspect your real Pi-holes with your existing configuration before merging. In browser Network tools, confirm `/data` and `/queries` stop when switching tabs or going offline, and resume without duplicate request streams.
-
-## PWA behavior
-
-Pi-Dash caches its application shell for offline/reload resilience. The service worker includes both dashboard scripts and both stylesheets, uses network-first loading for navigation and application assets, and never caches API responses. Live statistics require a working connection to Pi-Dash and its Pi-hole instances. A new cache version is installed for the responsive update; if an older installed PWA continues displaying an old shell after upgrading, close/reopen it or perform a hard refresh.
 
 ## Credits
 
@@ -252,11 +203,11 @@ This project is not associated with the official [Pi-hole](https://pi-hole.net/)
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
-Contributions, suggestions and bug reports are welcome through GitHub issues and pull requests.
+Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request.
 
 ## Thank You
 
