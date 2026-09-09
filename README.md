@@ -80,13 +80,25 @@ When `cache_ttl` is omitted, Pi-Dash calculates it as half of the shortest refre
 | `link` | `false` | Make the Pi-hole name a link to its admin interface. |
 | `verify_ssl` | `false` | Set to `true` to verify trusted HTTPS certificates, or provide a CA bundle path. |
 
-Settings omitted from `config.json` use the defaults above, so existing configurations continue to work. Passwords and CA bundle paths can reference environment variables:
+Settings omitted from `config.json` use the defaults above, so existing configurations continue to work. Existing installations may also continue storing the password directly in `config.json`:
+
+```json
+"password": "your_app_password_here"
+```
+
+For new installations, the password can instead be kept outside `config.json` by referencing an environment variable:
 
 ```json
 "password": "${PIHOLE_PRIMARY_PASSWORD}"
 ```
 
-Provide referenced variables through your shell or Docker environment. Literal passwords remain supported. Do not commit real passwords to GitHub.
+With Docker Compose, add the corresponding value to a `.env` file beside `compose.yaml`:
+
+```dotenv
+PIHOLE_PRIMARY_PASSWORD=your_app_password_here
+```
+
+The Compose example below passes this variable to Pi-Dash. For Docker Run, use `--env-file .env`; for a native installation, export the variable in your shell before starting Pi-Dash. The same `${ENV_NAME}` syntax can be used for a CA bundle path. The `.env` file is ignored by this repository and should not be committed to GitHub.
 
 The Network Summary includes only additive DNS counters: total queries, blocked queries, cached queries, and forwarded queries. It does not combine active clients, unique domains, or domains on lists because those values can overlap between Pi-holes. If an instance is unavailable, the summary is marked as partial.
 
@@ -131,7 +143,7 @@ services:
     ports:
       - 5001:5001
     environment:
-      PIHOLE_PRIMARY_PASSWORD: "your_app_password_here"
+      PIHOLE_PRIMARY_PASSWORD: "${PIHOLE_PRIMARY_PASSWORD}"
     volumes:
       - ./config.json:/app/config.json:ro
       - ./manifest.json:/app/manifest.json:ro
@@ -144,7 +156,7 @@ services:
 docker run -d \
   --name pi-dash \
   -p 5001:5001 \
-  -e PIHOLE_PRIMARY_PASSWORD='your_app_password_here' \
+  --env-file .env \
   -v /path/to/pi-dash/config.json:/app/config.json:ro \
   -v /path/to/pi-dash/manifest.json:/app/manifest.json:ro \
   ghcr.io/surajverma/pi-dash:latest
