@@ -45,7 +45,8 @@ _sessions_lock = threading.Lock()
 _cache_lock = threading.Lock()
 _stats_refresh_lock = threading.Lock()
 _queries_refresh_lock = threading.Lock()
-_blocking_lock = threading.Lock()
+_blocking_locks_lock = threading.Lock()
+_blocking_locks = {}
 _stats_cache = {'time': 0.0, 'data': None}
 _queries_cache = {}
 _blocking_cache = {}
@@ -55,6 +56,13 @@ def _int(value, default, minimum=100):
     try:
         value = int(value)
         return value if value >= minimum else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _bounded_int(value, default, minimum, maximum):
+    try:
+        return max(minimum, min(int(value), maximum))
     except (TypeError, ValueError):
         return default
 
@@ -218,6 +226,11 @@ def normalize_blocking(value):
     return None
 
 
+def _blocking_lock_for(name):
+    with _blocking_locks_lock:
+        return _blocking_locks.setdefault(name, threading.Lock())
+
+
 def get_blocking(pihole):
     name = pihole['name']
     now = time.monotonic()
@@ -225,8 +238,8 @@ def get_blocking(pihole):
         cached = _blocking_cache.get(name)
         if cached and now - cached['time'] < DEFAULT_BLOCKING_TTL / 1000:
             return cached['value']
-    with _blocking_lock:
-        # Coalesce simultaneous misses, as with the statistics cache.
+    with _blocking_lock_for(name):
+        # Coalesce misses for the same Pi-hole without delaying other instances.
         now = time.monotonic()
         with _cache_lock:
             cached = _blocking_cache.get(name)
@@ -345,11 +358,14 @@ def fetch_queries(length=50, force=False):
 
 
 def network_summary(data):
-    total = blocked = cached = forwarded = healthy = offline = disabled = unknown = 0
+    total = blocked = cached = forwarded = healthy = offline = auth_errors = disabled = unknown = 0
     contributing = 0
     for item in data.values():
         if item.get('error') or not isinstance(item.get('queries'), dict):
-            offline += 1
+            if item.get('_pi_dash', {}).get('health') == 'auth_error':
+                auth_errors += 1
+            else:
+                offline += 1
             continue
         contributing += 1
         queries = item['queries']
@@ -375,6 +391,7 @@ def network_summary(data):
         'healthy_instances': healthy,
         'blocking_disabled_instances': disabled,
         'blocking_unknown_instances': unknown,
+        'auth_error_instances': auth_errors,
         'offline_instances': offline,
         'partial': contributing != len(data),
     }
@@ -405,7 +422,7 @@ def data():
         if include_summary:
             result['summary'] = network_summary(stats)
         if include_queries:
-            length = max(1, min(int(request.args.get('length', 50)), 200))
+            length = _bounded_int(request.args.get('length'), 50, 1, 200)
             result['queries'] = fetch_queries(length)
         return jsonify(result)
     except Exception as exc:
@@ -415,7 +432,7 @@ def data():
 @bp.route('/queries')
 def queries():
     try:
-        length = max(1, min(int(request.args.get('length', 50)), 200))
+        length = _bounded_int(request.args.get('length'), 50, 1, 200)
         return jsonify(fetch_queries(length))
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500

@@ -198,7 +198,7 @@ The automated tests use mocked Pi-hole responses and do not require a live Pi-ho
 
 ```bash
 python -m unittest discover -s tests -v
-npm install
+npm ci
 npm run test:js
 npm run build:css
 npx playwright install chromium

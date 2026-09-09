@@ -15,7 +15,7 @@
   }
   const queries = count ? { [names[0]]: Array.from({ length: 36 }, (_, i) => ({ id: i + 1, time: i + 1, domain: i > 32 ? 'repeat.example.org' : `query-${i}.example.org`, blocked: i < 10 })) } : {};
   const cfg = { refresh_interval: 2000, queries_refresh_interval: 3000, show_queries: true, show_network_summary: true, show_trends: true, piholes: names.map(name => ({ name, link: false, enabled: true })) };
-  const summary = { total_queries: count * sample().queries.total, blocked_queries: count * 23808, percent_blocked: 26.7, cached_queries: count * sample().queries.cached, forwarded_queries: count * sample().queries.forwarded, instances: count, contributing_instances: scenario === 'states' ? 3 : count, offline_instances: scenario === 'states' ? 2 : 0, blocking_disabled_instances: scenario === 'states' ? 1 : 0, blocking_unknown_instances: scenario === 'states' ? 1 : 0, partial: scenario === 'states' };
+  const summary = { total_queries: count * sample().queries.total, blocked_queries: count * 23808, percent_blocked: 26.7, cached_queries: count * sample().queries.cached, forwarded_queries: count * sample().queries.forwarded, instances: count, contributing_instances: scenario === 'states' ? 3 : count, offline_instances: scenario === 'states' ? 1 : 0, auth_error_instances: scenario === 'states' ? 1 : 0, blocking_disabled_instances: scenario === 'states' ? 1 : 0, blocking_unknown_instances: scenario === 'states' ? 1 : 0, partial: scenario === 'states' };
   const native = params.get('native') === 'true';
   const realSetInterval = window.setInterval.bind(window), realClearInterval = window.clearInterval.bind(window);
   let hidden = false, online = true, nextTimer = 0;

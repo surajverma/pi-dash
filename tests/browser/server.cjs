@@ -23,4 +23,4 @@ http.createServer((req, res) => {
     res.setHeader('Content-Type', { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(file)] || 'text/plain');
     res.end(data);
   });
-}).listen(port, '0.0.0.0', () => console.log(`Rendered regression suite: http://localhost:${port}/tests/browser/`));
+}).listen(port, '127.0.0.1', () => console.log(`Rendered regression suite: http://localhost:${port}/tests/browser/`));

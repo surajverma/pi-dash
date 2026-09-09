@@ -81,6 +81,15 @@ test('health presentation does not infer network speed from API latency', () => 
   assert.equal(core.healthPresentation({ blocking: false }).text, 'Blocking OFF');
   assert.equal(core.healthPresentation({ health: 'auth_error' }, true).text, 'Auth failed');
   assert.match(core.networkStatus({ instances: 2, contributing_instances: 1, offline_instances: 1, partial: true }), /1 of 2 reporting/);
+  assert.match(core.networkStatus({ instances: 2, contributing_instances: 0, offline_instances: 1, auth_error_instances: 1, partial: true }), /1 auth failed/);
+});
+
+test('frequently updated timestamp is not an ARIA live region', async () => {
+  const app = makeBrowser();
+  try {
+    await app.settle();
+    assert.equal(app.window.document.getElementById('last-updated').hasAttribute('role'), false);
+  } finally { app.close(); }
 });
 
 test('mobile card starts compact and expands all desktop metrics', async () => {

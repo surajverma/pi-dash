@@ -103,6 +103,8 @@ async function checkLayout(width, height, scenario, dark) {
   }
   if (scenario === 'states') {
     for (const state of ['Blocking ON', 'Blocking OFF', 'Offline', 'Auth failed', 'blocking unknown']) assert(d.querySelector('main').textContent.includes(state), `missing ${state}`);
+    const networkHealth = d.querySelector('.network-health').textContent;
+    assert(networkHealth.includes('1 offline') && networkHealth.includes('1 auth failed'), 'network summary merges offline and authentication failures');
     assert(shown(d.querySelector('.network-partial')), 'missing partial summary');
   }
   if (scenario === 'zero') assert(d.querySelector('.empty-message') && !toggles.length, 'zero instances failed');

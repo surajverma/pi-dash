@@ -47,9 +47,10 @@
     if (!total) return 'No active Pi-holes';
     const parts = [`${reporting} of ${total} reporting`];
     if (summary?.blocking_disabled_instances) parts.push(`${summary.blocking_disabled_instances} blocking off`);
+    if (summary?.auth_error_instances) parts.push(`${summary.auth_error_instances} auth failed`);
     if (summary?.offline_instances) parts.push(`${summary.offline_instances} offline`);
     if (summary?.blocking_unknown_instances) parts.push(`${summary.blocking_unknown_instances} blocking unknown`);
-    if (!summary?.partial && !summary?.blocking_disabled_instances && !summary?.offline_instances && !summary?.blocking_unknown_instances) {
+    if (!summary?.partial && !summary?.blocking_disabled_instances && !summary?.auth_error_instances && !summary?.offline_instances && !summary?.blocking_unknown_instances) {
       return `${total} healthy`;
     }
     return parts.join(' · ');

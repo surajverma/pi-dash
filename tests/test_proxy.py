@@ -81,6 +81,7 @@ class BlockingAndSummaryTests(unittest.TestCase):
             'one': {'queries': {'total': 100, 'blocked': 10, 'cached': 60, 'forwarded': 40}, '_pi_dash': {'blocking': True}},
             'two': {'queries': {'total': 50, 'blocked': 15, 'cached': 20, 'forwarded': 30}, '_pi_dash': {'blocking': False}},
             'three': {'error': 'offline', '_pi_dash': {'health': 'unreachable'}},
+            'four': {'error': 'authentication failed', '_pi_dash': {'health': 'auth_error'}},
         }
         result = proxy.network_summary(data)
         self.assertEqual(result['total_queries'], 150)
@@ -91,6 +92,7 @@ class BlockingAndSummaryTests(unittest.TestCase):
         self.assertEqual(result['contributing_instances'], 2)
         self.assertEqual(result['healthy_instances'], 1)
         self.assertEqual(result['blocking_disabled_instances'], 1)
+        self.assertEqual(result['auth_error_instances'], 1)
         self.assertEqual(result['offline_instances'], 1)
         self.assertTrue(result['partial'])
         self.assertNotIn('clients', result)
@@ -125,6 +127,64 @@ class BlockingAndSummaryTests(unittest.TestCase):
             data = proxy.fetch_one({'name': 'One', 'address': 'http://localhost'})[1]
         self.assertEqual(data['_pi_dash']['health'], 'healthy')
         self.assertNotIn('latency_ms', data['_pi_dash'])
+
+
+class BlockingCacheTests(unittest.TestCase):
+    class Response:
+        def json(self):
+            return {'blocking': 'enabled'}
+
+    def setUp(self):
+        proxy._blocking_cache.clear()
+        proxy._blocking_locks.clear()
+
+    def tearDown(self):
+        proxy._blocking_cache.clear()
+        proxy._blocking_locks.clear()
+
+    def test_distinct_piholes_check_blocking_in_parallel(self):
+        entered = {'One': Event(), 'Two': Event()}
+        release = Event()
+
+        def slow_get(pihole, path):
+            self.assertEqual(path, '/api/dns/blocking')
+            entered[pihole['name']].set()
+            release.wait(3)
+            return self.Response()
+
+        with patch.object(proxy, 'pihole_get', side_effect=slow_get):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [
+                    pool.submit(proxy.get_blocking, {'name': name, 'address': 'http://localhost'})
+                    for name in ('One', 'Two')
+                ]
+                both_entered = entered['One'].wait(2) and entered['Two'].wait(2)
+                release.set()
+                values = [future.result(timeout=3) for future in futures]
+
+        self.assertTrue(both_entered)
+        self.assertEqual(values, [True, True])
+
+    def test_same_pihole_coalesces_simultaneous_blocking_checks(self):
+        entered = Event()
+        release = Event()
+
+        def slow_get(_pihole, _path):
+            entered.set()
+            release.wait(3)
+            return self.Response()
+
+        pihole = {'name': 'One', 'address': 'http://localhost'}
+        with patch.object(proxy, 'pihole_get', side_effect=slow_get) as fetch:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first = pool.submit(proxy.get_blocking, pihole)
+                self.assertTrue(entered.wait(2))
+                second = pool.submit(proxy.get_blocking, pihole)
+                release.set()
+                self.assertTrue(first.result(timeout=3))
+                self.assertTrue(second.result(timeout=3))
+
+        self.assertEqual(fetch.call_count, 1)
 
 
 class CacheTests(unittest.TestCase):
@@ -180,6 +240,27 @@ class RouteCompatibilityTests(unittest.TestCase):
             payload = client.get('/data?include_summary=true').get_json()
             self.assertEqual(payload['stats'], sample)
             self.assertIn('summary', payload)
+
+    def test_query_length_defaults_on_invalid_input(self):
+        with proxy.app.test_client() as client, \
+                patch.object(proxy, 'fetch_stats', return_value={}), \
+                patch.object(proxy, 'fetch_queries', return_value={}) as fetch:
+            self.assertEqual(client.get('/queries?length=invalid').status_code, 200)
+            fetch.assert_called_once_with(50)
+
+        with proxy.app.test_client() as client, \
+                patch.object(proxy, 'fetch_stats', return_value={}), \
+                patch.object(proxy, 'fetch_queries', return_value={}) as fetch:
+            self.assertEqual(client.get('/data?include_queries=true&length=invalid').status_code, 200)
+            fetch.assert_called_once_with(50)
+
+    def test_query_length_is_clamped(self):
+        cases = (('/queries?length=0', 1), ('/queries?length=999', 200))
+        for url, expected in cases:
+            with self.subTest(url=url), proxy.app.test_client() as client, \
+                    patch.object(proxy, 'fetch_queries', return_value={}) as fetch:
+                self.assertEqual(client.get(url).status_code, 200)
+                fetch.assert_called_once_with(expected)
 
     def test_health_does_not_contact_piholes(self):
         with proxy.app.test_client() as client, patch.object(proxy, 'fetch_stats') as fetch:
