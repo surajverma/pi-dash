@@ -55,9 +55,11 @@ class ConfigCompatibilityTests(unittest.TestCase):
     def test_example_is_valid_json_and_comments_are_ignored(self):
         with open(os.path.join(proxy.APP_ROOT, 'config-example.json'), encoding='utf-8') as handle:
             example = json.load(handle)
-        self.assertIn('_comment', example)
-        self.assertEqual(set(example) - {'_comment'}, set(example['_comment']) - {'about'})
-        self.assertEqual(set(example['piholes'][0]) - {'_comment'}, set(example['piholes'][0]['_comment']))
+        self.assertNotIn('_comment', example)
+        self.assertNotIn('_comment', example['piholes'][0])
+        # Older configurations may still contain explanatory fields.
+        example['_comment'] = 'legacy documentation'
+        example['piholes'][0]['_comment'] = 'legacy instance documentation'
         proxy.config = example
         filtered = proxy.filtered_config()
         self.assertNotIn('_comment', filtered)

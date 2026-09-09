@@ -55,7 +55,7 @@ Existing `config.json` files continue to work without adding any new options. Do
 
 ## Configuration
 
-Copy `config-example.json` to `config.json` and edit the values for your network. The example contains descriptive `_comment` fields explaining every setting and its default. Standard JSON does not permit `//` or `/* */` comments, so these explanatory fields keep the file valid JSON. Pi-Dash ignores `_comment` fields and never exposes them, passwords, or TLS settings in the frontend configuration.
+Copy `config-example.json` to `config.json` and edit the values for your network. The example is plain JSON without comments and matches the example below. The tables in this section explain every option and its code default. Passwords and TLS settings are never exposed in the frontend configuration.
 
 You can delete any optional setting to use its code default. Existing installations do not need a migration.
 
@@ -115,7 +115,7 @@ Passwords can be kept outside `config.json`:
 "password": "${PIHOLE_PRIMARY_PASSWORD}"
 ```
 
-Provide the variable through your shell or Docker environment. Literal passwords remain supported for existing installations. Treat your configuration and environment files as secrets; do not commit real passwords to GitHub.
+Provide the variable through your shell or Docker environment. An unset environment variable is left as its literal reference, not silently replaced with an empty password. Literal passwords remain supported for existing installations. Treat your configuration and environment files as secrets; do not commit real passwords to GitHub.
 
 ## Polling and query-feed behavior
 

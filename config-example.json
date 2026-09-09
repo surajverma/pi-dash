@@ -1,15 +1,4 @@
 {
-  "_comment": {
-    "about": "Copy this file to config.json and edit it. Standard JSON does not support // comments, so these _comment fields provide explanations and are ignored by Pi-Dash. All optional settings have code defaults; deleting a setting does not require replacing it with another one.",
-    "base_path": "Default: /. Set a URL path such as /pi-dash/ when hosting behind a reverse proxy. The proxy must forward this prefix consistently.",
-    "refresh_interval": "Default: 5000 milliseconds. Refreshes the main statistics. The example recommends 2000 ms; existing configurations retain their configured value.",
-    "queries_refresh_interval": "Default: the effective refresh_interval. Separately controls the optional live-query feed. The example recommends 3000 ms. Omitting this key preserves the old query cadence.",
-    "cache_ttl": "Default: min(1000, max(100, min(refresh_interval, queries_refresh_interval) / 2)) milliseconds, rounded down. The example uses 1000 ms. Set 0 to disable the shared in-process cache. An explicit cache TTL may delay fresh upstream data; keep it below your fastest polling interval.",
-    "show_queries": "Default: false. Enables the optional DNS query feed. Queries are requested only while the browser page is visible and online; hidden/offline pages stop polling. Desktop uses the original ambient background feed; compact mobile/landscape layouts use a collapsible panel below the cards.",
-    "show_network_summary": "Default: true. Shows additive DNS totals across reporting Pi-holes. If an instance is unavailable, totals are marked partial. Active clients and unique domains are not summed because they can overlap.",
-    "show_trends": "Default: true. Shows a short query-rate sparkline kept only in browser memory. It does not create a database or store historical DNS activity.",
-    "piholes": "Default: empty list. Add one or more Pi-hole instances below. Names must be unique. Every enabled instance needs a name and address."
-  },
   "base_path": "/",
   "refresh_interval": 2000,
   "queries_refresh_interval": 3000,
@@ -19,27 +8,11 @@
   "show_trends": true,
   "piholes": [
     {
-      "_comment": {
-        "name": "Required. Unique display name for this Pi-hole.",
-        "address": "Required. Full Pi-hole base URL, including http:// or https:// and any port. Do not include /admin or /api. Example: http://192.168.1.50:80.",
-        "password": "Default: empty string. Use an API/application password or ${ENVIRONMENT_VARIABLE}. A literal password is supported for existing installations. An unset environment variable is not silently replaced with an empty password.",
-        "enabled": "Default: true. Set false to exclude this Pi-hole without deleting its configuration.",
-        "link": "Default: false. If true, the instance name opens its Pi-hole administration page in a new tab.",
-        "verify_ssl": "Default: false for compatibility with existing self-signed LAN installations. Set true for a trusted HTTPS certificate, or provide a path to a CA bundle, including ${ENVIRONMENT_VARIABLE}. This controls the Pi-Dash-to-Pi-hole connection."
-      },
       "name": "Primary",
       "address": "https://pi.hole",
       "password": "${PIHOLE_PRIMARY_PASSWORD}",
       "enabled": true,
       "link": true,
-      "verify_ssl": false
-    },
-    {
-      "name": "Secondary",
-      "address": "http://192.168.1.51",
-      "password": "your_app_password_here",
-      "enabled": false,
-      "link": false,
       "verify_ssl": false
     }
   ]
