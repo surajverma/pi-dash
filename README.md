@@ -23,7 +23,8 @@ Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole insta
 - **Dark Mode and PWA Support:** Works with your preferred color scheme and can be installed as a Progressive Web App.
 
 ## Mobile View in Dark Mode
-<img width="1170" height="684" alt="image" src="https://github.com/user-attachments/assets/e62bc5f9-2b11-453c-9570-4fead28efb88" />
+<img width="1170" height="684" alt="image" src="https://github.com/user-attachments/assets/b2b78439-bb6b-41c5-b61f-739ab071b871" />
+
 
 
 
