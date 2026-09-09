@@ -1,0 +1,95 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare test configuration
+        run: cp config-example.json config.json
+
+      - name: Run backend regression tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Compile-check backend
+        run: python -m py_compile proxy.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Syntax-check frontend and service worker
+        run: |
+          node --check js/dashboard-core.js
+          node --check js/app.js
+          node --check sw.js
+
+      - name: Run frontend behavior regressions
+        run: npm run test:js
+
+      - name: Verify Tailwind build
+        run: |
+          npm run build:css
+          git diff --exit-code -- css/style.css
+
+      - name: Install rendered-test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run rendered viewport and lifecycle regressions
+        run: npm run test:browser
+
+      - name: Save rendered test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-dashboard
+          path: test-results/
+
+      - name: Verify the shipped HTML, scripts and styles
+        run: |
+          test -s css/style.css
+          test -s css/dashboard.css
+          test -s js/dashboard-core.js
+          test -s js/app.js
+          node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8'); for(const file of ['css/style.css','css/dashboard.css','js/dashboard-core.js','js/app.js']) { if(!html.includes(file)||!fs.existsSync(file)) process.exit(1); }"
+
+      - name: Build Docker image
+        run: docker build --tag pi-dash:test .
+
+      - name: Smoke-test Docker image
+        run: |
+          docker run --detach --name pi-dash-test \
+            --publish 127.0.0.1:5001:5001 \
+            --volume "$PWD/config-example.json:/app/config.json:ro" \
+            pi-dash:test
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:5001/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs pi-dash-test
+          exit 1
+
+      - name: Stop Docker smoke-test container
+        if: always()
+        run: docker rm --force pi-dash-test || true

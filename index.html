@@ -1,25 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pi-hole Dashboard</title>
-
     <link rel="icon" href="{{ICON_URL}}" />
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" id="theme-color-meta" content="#1f2937" />
-
-  <!-- Tailwind CSS is now built locally and included below -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <link rel="stylesheet" href="css/style.css" />
-
+    <link rel="stylesheet" href="css/dashboard.css" />
     <script>
-      if (
-        localStorage.theme === 'dark' ||
-        (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
-      ) {
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
         document.getElementById('theme-color-meta').setAttribute('content', '#111827');
       } else {
@@ -28,19 +19,38 @@
       }
     </script>
   </head>
-  <body
-    class="h-full flex items-center justify-center p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300">
-  <div id="main-wrapper" class="w-full max-w-sm sm:max-w-xl mx-auto relative z-10">
+  <body class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300">
+    <div id="main-wrapper" class="w-full mx-auto relative z-10">
       <header class="text-center mb-6">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Pi-Dash</h1>
         <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400">Last updated: Never</p>
       </header>
-
+      <section id="network-summary" hidden class="bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
+        <div class="network-heading">
+          <h2 class="text-sm font-semibold text-gray-700 dark:text-cyan-400">Network Summary</h2>
+          <span class="network-health text-xs text-gray-500 dark:text-gray-400"></span>
+        </div>
+        <p class="network-partial" hidden>Partial totals. One or more Pi-holes are not reporting.</p>
+        <div class="network-metrics text-sm">
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Queries</div><div class="network-total font-medium text-blue-500">--</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div><div class="network-blocked font-medium text-red-500">--</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked %</div><div class="network-percent font-medium text-yellow-600 dark:text-yellow-500">--%</div></div>
+          <div><div class="text-xs text-gray-500 dark:text-gray-400">Cached / Forwarded</div><div class="network-cache font-medium text-indigo-500">-- / --</div></div>
+        </div>
+      </section>
       <main class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4"></main>
     </div>
-
-  <ul id="background-queries" aria-hidden="true"></ul>
-
+    <section id="query-panel" class="query-panel" hidden aria-label="Recent DNS queries">
+      <div class="query-panel-header">
+        <span class="query-panel-title">Recent queries</span>
+        <div class="query-actions">
+          <button id="query-pause" type="button" aria-pressed="false">Pause</button>
+          <button id="query-toggle" type="button" aria-expanded="false" aria-controls="background-queries">Show queries</button>
+        </div>
+      </div>
+      <ul id="background-queries" aria-label="Recent DNS query activity"></ul>
+    </section>
+    <script src="js/dashboard-core.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>

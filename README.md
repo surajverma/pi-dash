@@ -1,4 +1,5 @@
 [![CI/CD](https://github.com/surajverma/pi-dash/actions/workflows/main.yml/badge.svg)](https://github.com/surajverma/pi-dash/actions/workflows/main.yml)
+[![Tests](https://github.com/surajverma/pi-dash/actions/workflows/test.yml/badge.svg)](https://github.com/surajverma/pi-dash/actions/workflows/test.yml)
 ![Latest Release](https://img.shields.io/github/v/release/surajverma/pi-dash?include_prereleases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/surajverma/pi-dash)](https://github.com/surajverma/pi-dash/commits/main)
 [![GitHub issues](https://img.shields.io/github/issues/surajverma/pi-dash)](https://github.com/surajverma/pi-dash/issues)
@@ -11,63 +12,101 @@ Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole insta
 
 ## Features
 
-- **Multiple Pi-hole Support:** Monitor all your Pi-hole instances from a single dashboard. You can add as many as Pi-hole's you want.
-- **Dynamic Configuration:** Easily add, remove, or disable Pi-holes through a simple `config.json` file.
-- **Responsive Design:** The layout works on both desktop and mobile devices, stacking cards vertically on smaller screens.
-- **Real-time Statistics:** The dashboard automatically refreshes every second.
-- **Lightweight and Fast:** Built with Flask and vanilla JavaScript, Pi-Dash is fast and has minimal dependencies.
-- **Dark Mode:** Automatically switches theme based on your system preferences.
+- **Multiple Pi-hole Support:** Monitor all your Pi-hole instances from a single dashboard.
+- **Network Summary:** View combined query, blocked, cached, and forwarded totals across reporting Pi-holes.
+- **Pi-hole Status:** See reachability, authentication errors, and blocking ON/OFF state for each instance.
+- **Responsive Design:** Desktop shows the full dashboard and ambient query feed. Mobile shows critical metrics in compact cards, with an accessible control to expand all available metrics.
+- **Live Query Feed:** Optionally show recent allowed and blocked domains. Consecutive duplicate queries are grouped with `(x2)`, `(x3)`, and similar counts.
+- **Configurable Refresh:** Set separate refresh intervals for statistics and queries. If the query interval is omitted, it uses the statistics interval.
+- **Efficient Polling:** Polling stops while the page is hidden or the browser is offline, then resumes safely when it becomes active again. A short shared cache reduces duplicate Pi-hole API requests.
+- **Lightweight and Fast:** Built with Flask and vanilla JavaScript, with no database or frontend framework.
+- **Dark Mode and PWA Support:** Works with your preferred color scheme and can be installed as a Progressive Web App.
 
 ![pi-dash-landscape](https://github.com/user-attachments/assets/a0e1fbef-279a-40df-9424-0cad50c31b50)
 
-
-<img width="2481" height="1477" alt="Screenshot 2025-10-04 114711" src="https://github.com/user-attachments/assets/e160cb8d-8dd9-49ac-801a-a95a34c254f7" />
+<img width="2481" height="1477" alt="Pi-Dash dashboard" src="https://github.com/user-attachments/assets/e160cb8d-8dd9-49ac-801a-a95a34c254f7" />
 
 ## Configuration
 
-Before running the application, you need to create and configure the following files:
+Copy `config-example.json` to `config.json` and edit it for your network. The example is valid JSON without comments; all options and their defaults are described below.
 
 ### 1. `config.json`
-
-This file manages your Pi-hole instances and dashboard settings. Example:
 
 ```json
 {
   "base_path": "/",
-  "refresh_interval": 1000,
+  "refresh_interval": 2000,
+  "queries_refresh_interval": 3000,
+  "cache_ttl": 1000,
   "show_queries": false,
+  "show_network_summary": true,
+  "show_trends": true,
   "piholes": [
     {
       "name": "Primary",
-      "address": "https://pi.hole/one",
-      "password": "your_app_password_here",
+      "address": "https://pi.hole",
+      "password": "${PIHOLE_PRIMARY_PASSWORD}",
       "enabled": true,
-      "link": true
-    },
-    {
-      "name": "Secondary",
-      "address": "https://pi.hole/two",
-      "password": "your_app_password_here",
-      "enabled": true,
-      "link": false
+      "link": true,
+      "verify_ssl": false
     }
   ]
 }
 ```
 
-- **base_path**: (optional) The subpath where the application is hosted (e.g., `/pi-dash/`). Defaults to `/`.
-- **refresh_interval**: (optional) How often the dashboard updates, in milliseconds (e.g., 1000 = 1 second).
-- **show_queries**: (optional, default: `false`) When set to `true`, a subtle scrolling feed of recent DNS queries will appear from the bottom of the screen. Blocked domains are shown in red, allowed in green.
-- **piholes**: List of Pi-hole instances.
-  - **name**: Display name for your Pi-hole (e.g., "Primary").
-  - **address**: Full URL to your Pi-hole (e.g., "http://pi.hole").
-  - **password**: Your Pi-hole API token/password.
-  - **enabled**: Set to `true` to display the Pi-hole on the dashboard, or `false` to hide it.
-  - **link**: (optional, default: `false`) When `true`, the display name becomes a clickable link that opens the Pi-hole admin in a new tab.
+#### Dashboard options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `base_path` | `/` | Subpath where Pi-Dash is hosted, for example `/pi-dash/`. |
+| `refresh_interval` | `5000` | Statistics refresh interval in milliseconds. |
+| `queries_refresh_interval` | `refresh_interval` | Query-feed refresh interval in milliseconds. |
+| `cache_ttl` | Automatic | Shared backend cache lifetime in milliseconds. Set to `0` to disable caching. |
+| `show_queries` | `false` | Show the live DNS query feed. Allowed queries are green and blocked queries are red. |
+| `show_network_summary` | `true` | Show combined statistics from all reporting Pi-holes. |
+| `show_trends` | `true` | Show short, in-memory query-rate sparklines. |
+| `piholes` | `[]` | List of Pi-hole instances to monitor. |
+
+When `cache_ttl` is omitted, Pi-Dash calculates it as half of the shortest refresh interval, with a minimum of 100 ms and a maximum of 1000 ms. The values in `config-example.json` are recommended example settings; omitted options use the defaults above.
+
+#### Pi-hole options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `name` | Required | Display name for the Pi-hole. Names must be unique. |
+| `address` | Required | Full Pi-hole base URL, including the scheme and optional port. Do not include `/admin` or `/api`. |
+| `password` | Empty string | Pi-hole API/application password. Literal values and `${ENV_NAME}` references are supported. |
+| `enabled` | `true` | Set to `false` to hide and stop monitoring an instance without deleting it from the configuration. |
+| `link` | `false` | Make the Pi-hole name a link to its admin interface. |
+| `verify_ssl` | `false` | Set to `true` to verify trusted HTTPS certificates, or provide a CA bundle path. |
+
+Settings omitted from `config.json` use the defaults above, so existing configurations continue to work. Existing installations may also continue storing the password directly in `config.json`:
+
+```json
+"password": "your_app_password_here"
+```
+
+For new installations, the password can instead be kept outside `config.json` by referencing an environment variable:
+
+```json
+"password": "${PIHOLE_PRIMARY_PASSWORD}"
+```
+
+With Docker Compose, add the corresponding value to a `.env` file beside `compose.yaml`:
+
+```dotenv
+PIHOLE_PRIMARY_PASSWORD=your_app_password_here
+```
+
+The Compose example below passes this variable to Pi-Dash. For Docker Run, use `--env-file .env`; for a native installation, export the variable in your shell before starting Pi-Dash. The same `${ENV_NAME}` syntax can be used for a CA bundle path. The `.env` file is ignored by this repository and should not be committed to GitHub.
+
+The Network Summary includes only additive DNS counters: total queries, blocked queries, cached queries, and forwarded queries. It does not combine active clients, unique domains, or domains on lists because those values can overlap between Pi-holes. If an instance is unavailable, the summary is marked as partial.
+
+When the query feed is enabled, it displays recent queries while the dashboard is visible and online. Only consecutive entries with the same Pi-hole, domain, and blocked/allowed state are grouped. The feed is intended as a live overview; use Pi-hole's query log for complete history.
 
 ### 2. `manifest.json` (Optional)
 
-This file is for Progressive Web App (PWA) settings and icon. Example:
+This file contains the Progressive Web App name, colors, and icon:
 
 ```json
 {
@@ -88,62 +127,87 @@ This file is for Progressive Web App (PWA) settings and icon. Example:
 }
 ```
 
-- **icons.src**: Replace with a direct link to your Pi-hole logo or preferred icon.
+Replace `icons.src` with a direct link to your Pi-hole logo or preferred icon.
 
 ---
 
 ## Installation
 
-### Docker
+### Docker Compose
 
-1. **Docker Compose**
-   ```yaml
-   services:
-     pi-dash:
-       image: ghcr.io/surajverma/pi-dash:latest
-       container_name: pi-dash
-       ports:
-         - 5001:5001
-       volumes:
-         - ./config.json:/app/config.json
-         - ./manifest.json:/app/manifest.json
-         # Assumes config.json and manifest.json are in the same folder as your compose.yml file
-   ```
-2. **Docker Run**
-   ```bash
-   docker run -d \
-    --name=pi-dash \
-    -p 5001:5001 \
-    -v /path/to/pi-dash/config.json:/app/config.json \
-    -v /path/to/pi-dash/manifest.json:/app/manifest.json \ # If you wish to edit the current manifest
-    ghcr.io/surajverma/pi-dash:latest
-   ```
+```yaml
+services:
+  pi-dash:
+    image: ghcr.io/surajverma/pi-dash:latest
+    container_name: pi-dash
+    ports:
+      - 5001:5001
+    environment:
+      PIHOLE_PRIMARY_PASSWORD: "${PIHOLE_PRIMARY_PASSWORD}"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./manifest.json:/app/manifest.json:ro
+    restart: unless-stopped
+```
+
+### Docker Run
+
+```bash
+docker run -d \
+  --name pi-dash \
+  -p 5001:5001 \
+  --env-file .env \
+  -v /path/to/pi-dash/config.json:/app/config.json:ro \
+  -v /path/to/pi-dash/manifest.json:/app/manifest.json:ro \
+  ghcr.io/surajverma/pi-dash:latest
+```
 
 ### Native Install
 
-1.  **Clone the repository:**
+1. Clone the repository:
 
-    ```bash
-    git clone https://github.com/surajverma/pi-dash.git
-    cd pi-dash
-    ```
+   ```bash
+   git clone https://github.com/surajverma/pi-dash.git
+   cd pi-dash
+   ```
 
-2.  **Install the dependencies:**
+2. Create your configuration and install the dependencies:
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+   ```bash
+   cp config-example.json config.json
+   python -m pip install -r requirements.txt
+   ```
 
-3.  **Start the app:**
-    To start the application, run the following command from the project's root directory:
-    ```bash
-    python proxy.py
-    ```
+   On Windows, use `copy config-example.json config.json` instead.
 
-Then, open your web browser and navigate to `http://localhost:5001`.
+3. Start Pi-Dash:
+
+   ```bash
+   python proxy.py
+   ```
+
+Open `http://localhost:5001` in your browser.
+
+## Health Check
+
+`GET /health` reports whether the Pi-Dash application is running. It does not contact the configured Pi-hole instances.
+
+## Development
+
+The automated tests use mocked Pi-hole responses and do not require a live Pi-hole:
+
+```bash
+python -m unittest discover -s tests -v
+npm ci
+npm run test:js
+npm run build:css
+npx playwright install chromium
+npm run test:browser
+```
 
 ## Credits
-Initial development of Pi-dash was done by [Codeloaf](https://github.com/codeloaf). It has since been transferred to this repository for ongoing maintenance, as the original author is not active on GitHub. 
+
+Initial development of Pi-Dash was done by [Codeloaf](https://github.com/codeloaf). It has since been transferred to this repository for ongoing maintenance, as the original author is not active on GitHub.
 
 ## Disclaimer
 
@@ -158,4 +222,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request.
 
 ## Thank You
+
 If you like my work, you can [buy me a coffee ☕](https://ko-fi.com/skv)

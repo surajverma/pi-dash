@@ -1,381 +1,350 @@
 document.addEventListener('DOMContentLoaded', () => {
-  let refreshIntervalId = null;
-  let stalenessIntervalId = null;
+  'use strict';
+  const core = window.PiDashCore;
+  if (!core) throw new Error('Pi-Dash core is missing');
+
+  const MAX_ROWS = 100;
+  const MAX_PENDING = 1000;
+  const MAX_TREND_POINTS = 30;
+  const metrics = [
+    ['total', 'Total Queries', 'text-blue-500'],
+    ['blocked', 'Queries Blocked', 'text-red-500'],
+    ['percentage', 'Percent Blocked', 'text-yellow-600 dark:text-yellow-500'],
+    ['cache', 'Cached / Forwarded', 'text-indigo-500'],
+    ['unique', 'Unique Domains', 'text-orange-500'],
+    ['clients', 'Active Clients', 'text-purple-500'],
+    ['domains', 'Domains on Lists', 'text-green-600 dark:text-green-500'],
+  ];
+  const cards = new Map();
+  const trendHistory = new Map();
+  const queryTracker = core.createQueryTracker();
+  const queryRows = [];
+  let pendingQueries = [];
   let appConfig = null;
-  let isFetching = false;
-  let lastUpdateTime = null;
-  let queryFeedPaused = false;
-  const lastCursorByPihole = {};
+  let statsTimer = null, queriesTimer = null, stalenessTimer = null;
+  let statsController = null, queriesController = null, initController = null;
+  let lastUpdateTime = null, manualPause = false, hoverPause = false;
+  let foregroundGeneration = 0;
 
-  async function fetchData(url) {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
+  const main = document.querySelector('main');
+  const network = document.getElementById('network-summary');
+  const queryContainer = document.getElementById('background-queries');
+  const queryPanel = document.getElementById('query-panel');
+  const queryToggle = document.getElementById('query-toggle');
+  const pauseButton = document.getElementById('query-pause');
+  const timestamp = document.getElementById('last-updated');
+  const number = value => {
+    const parsed = Number(value);
+    return (Number.isFinite(parsed) ? parsed : 0).toLocaleString();
+  };
+
+  function visible() {
+    return !document.hidden && navigator.onLine !== false;
   }
 
-  function processSummaryData(summaryData) {
-    if (!summaryData || !summaryData.queries) {
-      return {
-        total: 0,
-        blocked: 0,
-        percentage: 0,
-        clients: 0,
-        rate: 0,
-        cached: 0,
-        forwarded: 0,
-        unique: 0,
-        domains: 0,
-      };
-    }
-
-    const queries = summaryData.queries;
-    const clients = summaryData.clients;
-    const gravity = summaryData.gravity;
-
-    return {
-      total: Number(queries.total) || 0,
-      blocked: Number(queries.blocked) || 0,
-      percentage: Number(queries.percent_blocked) || 0,
-      clients: Number(clients.active) || 0,
-      rate: Number(queries.frequency) || 0,
-      cached: Number(queries.cached) || 0,
-      forwarded: Number(queries.forwarded) || 0,
-      unique: Number(queries.unique_domains) || 0,
-      domains: Number(gravity.domains_being_blocked) || 0,
-    };
+  async function fetchData(url, signal) {
+    const response = await fetch(url, { cache: 'no-store', signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (data?.error) throw new Error(data.error);
+    return data;
   }
 
-  async function updatePiholeUI(piholeName, rawData) {
-    const section = document.getElementById(`pihole-${piholeName}-section`);
-    if (!section) return;
+  function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
 
-    const nameEl = section.querySelector('.pihole-name');
-    const rateEl = section.querySelector('.pihole-rate');
-    const totalEl = section.querySelector('.pihole-total');
-    const blockedEl = section.querySelector('.pihole-blocked');
-    const percentEl = section.querySelector('.pihole-percent');
-    const clientsEl = section.querySelector('.pihole-clients');
-    const statusDotEl = section.querySelector('.status-dot');
-    const cacheEl = section.querySelector('.pihole-cache');
-    const uniqueEl = section.querySelector('.pihole-unique');
-    const domainsEl = section.querySelector('.pihole-domains');
+  function addMetric(parent, key, label, color, compact = false) {
+    const row = element('div', compact ? 'mobile-metric' : 'metric-row');
+    const caption = element('span', 'metric-label', label);
+    const value = element('span', `metric-value ${color}`, '--');
+    value.dataset.value = key;
+    row.append(caption, value);
+    parent.append(row);
+  }
 
+  function safeAdminUrl(address) {
     try {
-      if (rawData.error) throw new Error(rawData.error);
+      const url = new URL(address);
+      if (!['http:', 'https:'].includes(url.protocol)) return null;
+      url.pathname = url.pathname.replace(/\/$/, '') + '/admin';
+      url.search = '';
+      url.hash = '';
+      return url.href;
+    } catch (_) { return null; }
+  }
 
-      const stats = processSummaryData(rawData);
-
-      let rateValue;
-      let rateUnit;
-      if (stats.rate < 1.0) {
-        rateValue = (stats.rate * 60).toFixed(1);
-        rateUnit = '/min';
-      } else {
-        rateValue = stats.rate.toFixed(1);
-        rateUnit = '/sec';
-      }
-      if (rateEl) {
-        rateEl.textContent = `(${rateValue}${rateUnit})`;
-        rateEl.classList.remove('text-gray-500', 'dark:text-gray-400');
-        rateEl.classList.add('text-teal-500', 'dark:text-teal-400');
-      } else {
-        
-        nameEl.innerHTML = `${piholeName} <span class="text-sm font-normal text-teal-500 dark:text-teal-400">(${rateValue}${rateUnit})</span>`;
-      }
-
-      totalEl.textContent = stats.total.toLocaleString();
-      blockedEl.textContent = stats.blocked.toLocaleString();
-      percentEl.textContent = `${stats.percentage.toFixed(1)}%`;
-      clientsEl.textContent = stats.clients.toLocaleString();
-      cacheEl.textContent = `${stats.cached.toLocaleString()} / ${stats.forwarded.toLocaleString()}`;
-      uniqueEl.textContent = stats.unique.toLocaleString();
-      domainsEl.textContent = stats.domains.toLocaleString();
-
-      statusDotEl.classList.remove('bg-gray-500', 'bg-red-500');
-      statusDotEl.classList.add('bg-green-500');
-    } catch (error) {
-      console.error(`Failed to update Pi-hole ${piholeName} data:`, error);
-      if (rateEl) {
-        rateEl.textContent = `(--/sec)`;
-        rateEl.classList.remove('text-teal-500', 'dark:text-teal-400');
-        rateEl.classList.add('text-gray-500', 'dark:text-gray-400');
-      } else {
-        nameEl.innerHTML = `${piholeName} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">(--/sec)</span>`;
-      }
-      [totalEl, blockedEl, clientsEl, uniqueEl, domainsEl].forEach((el) => (el.textContent = '--'));
-      percentEl.textContent = '--%';
-      cacheEl.textContent = '-- / --';
-      statusDotEl.classList.remove('bg-gray-500', 'bg-green-500');
-      statusDotEl.classList.add('bg-red-500');
+  function createCard(pihole, index) {
+    const section = element('section', 'instance-card');
+    const heading = element('div', 'instance-heading');
+    const identity = element('div', 'instance-identity');
+    const nameLine = element('h2', 'instance-name');
+    const url = pihole.link ? safeAdminUrl(pihole.address) : null;
+    const name = element(url ? 'a' : 'span', '', pihole.name);
+    if (url) {
+      name.href = url;
+      name.target = '_blank';
+      name.rel = 'noopener noreferrer';
+      name.setAttribute('aria-label', `Open ${pihole.name} Pi-hole Admin`);
     }
+    const rate = element('span', 'pihole-rate', '(--/sec)');
+    nameLine.append(name, ' ', rate);
+    const healthLine = element('div', 'instance-health');
+    const dot = element('span', 'status-dot status-neutral');
+    const health = element('span', 'pihole-health', 'Checking');
+    healthLine.append(dot, health);
+    identity.append(nameLine, healthLine);
+    const sparkline = element('div', 'pihole-sparkline');
+    sparkline.setAttribute('aria-hidden', 'true');
+    heading.append(identity, sparkline);
+    section.append(heading);
+
+    const compact = element('div', 'mobile-instance-summary');
+    addMetric(compact, 'total', 'Queries', 'text-blue-500', true);
+    addMetric(compact, 'blocked', 'Blocked', 'text-red-500', true);
+    addMetric(compact, 'percentage', 'Blocked %', 'text-yellow-600 dark:text-yellow-500', true);
+    section.append(compact);
+
+    const details = element('div', 'instance-details');
+    details.id = `instance-details-${index}`;
+    for (const [key, label, color] of metrics) addMetric(details, key, label, color);
+    section.append(details);
+    const toggle = element('button', 'instance-toggle', 'Show details');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', details.id);
+    toggle.setAttribute('aria-label', `Show details for ${pihole.name}`);
+    toggle.addEventListener('click', () => {
+      const expanded = section.classList.toggle('is-expanded');
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.textContent = expanded ? 'Hide details' : 'Show details';
+      toggle.setAttribute('aria-label', `${toggle.textContent} for ${pihole.name}`);
+    });
+    section.append(toggle);
+    cards.set(pihole.name, section);
+    return section;
+  }
+
+  function renderSparkline(name, section, rate) {
+    const target = section.querySelector('.pihole-sparkline');
+    target.hidden = !appConfig.show_trends;
+    if (!appConfig.show_trends) { target.replaceChildren(); return; }
+    const history = trendHistory.get(name) || [];
+    history.push(rate);
+    if (history.length > MAX_TREND_POINTS) history.shift();
+    trendHistory.set(name, history);
+    if (history.length < 2) return;
+    const min = Math.min(...history), max = Math.max(...history), range = max - min || 1;
+    const points = history.map((v, i) => `${i / (history.length - 1) * 100},${24 - (v - min) / range * 20}`).join(' ');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 100 28');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', points);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', 'currentColor');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.append(line);
+    target.replaceChildren(svg);
+  }
+
+  function updatePiholeUI(name, raw) {
+    const section = cards.get(name);
+    if (!section) return;
+    const meta = raw?._pi_dash || {};
+    const failed = !raw || !!raw.error || !raw.queries;
+    const status = core.healthPresentation(meta, failed);
+    section.querySelector('.status-dot').className = `status-dot status-${status.state}`;
+    const health = section.querySelector('.pihole-health');
+    health.className = `pihole-health status-text-${status.state}`;
+    health.textContent = status.text;
+    section.querySelector('.pihole-rate').textContent = failed ? '(--/sec)' : `(${core.formatRate(core.summaryStats(raw).rate)})`;
+    const stats = core.summaryStats(failed ? null : raw);
+    const values = failed ? {} : {
+      total: number(stats.total), blocked: number(stats.blocked),
+      percentage: `${stats.percentage.toFixed(1)}%`,
+      cache: `${number(stats.cached)} / ${number(stats.forwarded)}`,
+      unique: number(stats.unique), clients: number(stats.clients), domains: number(stats.domains),
+    };
+    section.querySelectorAll('[data-value]').forEach(node => {
+      node.textContent = values[node.dataset.value] ?? (node.dataset.value === 'percentage' ? '--%' : '--');
+    });
+    if (failed) { section.querySelector('.pihole-sparkline').replaceChildren(); trendHistory.delete(name); }
+    else renderSparkline(name, section, stats.rate);
+  }
+
+  function updateNetworkSummary(summary) {
+    if (!appConfig.show_network_summary || !summary) return;
+    network.hidden = false;
+    network.querySelector('.network-health').textContent = core.networkStatus(summary);
+    network.querySelector('.network-total').textContent = number(summary.total_queries);
+    network.querySelector('.network-blocked').textContent = number(summary.blocked_queries);
+    network.querySelector('.network-percent').textContent = `${Number(summary.percent_blocked || 0).toFixed(1)}%`;
+    network.querySelector('.network-cache').textContent = `${number(summary.cached_queries)} / ${number(summary.forwarded_queries)}`;
+    const partial = summary.partial || summary.contributing_instances < summary.instances;
+    network.querySelector('.network-partial').hidden = !partial;
+    network.classList.toggle('is-partial', Boolean(partial));
   }
 
   function updateTimestamp() {
     lastUpdateTime = Date.now();
-    const timestampEl = document.getElementById('last-updated');
-    const now = new Date();
-    timestampEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
-    timestampEl.classList.remove('text-yellow-600', 'dark:text-yellow-500');
-    timestampEl.classList.add('text-gray-500', 'dark:text-gray-400');
+    timestamp.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    timestamp.classList.remove('is-stale');
   }
-
-  function updateStalenessIndicator() {
+  function updateStaleness() {
     if (!lastUpdateTime || !appConfig) return;
-    const timestampEl = document.getElementById('last-updated');
-    if (!timestampEl) return;
-    const elapsed = Date.now() - lastUpdateTime;
-    const threshold = (appConfig.refresh_interval || 5000) * 2;
-    if (elapsed > threshold) {
-      timestampEl.classList.add('text-yellow-600', 'dark:text-yellow-500');
-      timestampEl.classList.remove('text-gray-500', 'dark:text-gray-400');
-    }
+    timestamp.classList.toggle('is-stale', Date.now() - lastUpdateTime > appConfig.refresh_interval * 2);
   }
 
-  async function refreshDashboard() {
-    if (isFetching) return;
-    isFetching = true;
+  function renderQueryRows() {
+    const fragment = document.createDocumentFragment();
+    for (const group of queryRows) {
+      const row = element('li', group.blocked ? 'query-blocked' : 'query-allowed');
+      row.textContent = group.label + (group.count > 1 ? ` (x${group.count})` : '');
+      row.title = group.label;
+      fragment.append(row);
+    }
+    queryContainer.replaceChildren(fragment);
+    queryContainer.scrollTop = queryContainer.scrollHeight;
+  }
+
+  function isQueryPaused() { return manualPause || hoverPause; }
+  function flushQueries() {
+    if (isQueryPaused() || !pendingQueries.length) return;
+    const groups = core.groupConsecutiveQueries(pendingQueries);
+    pendingQueries = [];
+    const merged = core.mergeConsecutiveGroups(queryRows, groups, MAX_ROWS);
+    queryRows.splice(0, queryRows.length, ...merged);
+    renderQueryRows();
+  }
+
+  function renderQueries(data) {
+    const events = core.collectNewQueries(queryTracker, data);
+    if (!events.length) return;
+    pendingQueries.push(...events);
+    if (pendingQueries.length > MAX_PENDING) pendingQueries = pendingQueries.slice(-MAX_PENDING);
+    flushQueries();
+  }
+
+  function updatePauseState() {
+    pauseButton.textContent = manualPause ? 'Resume' : 'Pause';
+    pauseButton.setAttribute('aria-pressed', String(manualPause));
+    if (!isQueryPaused()) flushQueries();
+  }
+
+  function canApply(generation, signal) {
+    return generation === foregroundGeneration && visible() && !signal.aborted;
+  }
+
+  async function refreshStats() {
+    if (!appConfig || !visible() || (statsController && !statsController.signal.aborted)) return;
+    const generation = foregroundGeneration;
+    const controller = new AbortController();
+    statsController = controller;
     try {
-      
-  const includeQueries = appConfig && appConfig.show_queries;
-  const endpoint = includeQueries ? 'data?include_queries=true&length=50' : 'data';
-      const data = await fetchData(endpoint);
-      
-      
-      const statsData = data.stats || data;
-      const queriesData = data.queries;
-      
-      
-      for (const [piholeName, piholeData] of Object.entries(statsData)) {
-        await updatePiholeUI(piholeName, piholeData);
-      }
+      const payload = await fetchData('data?include_summary=true', controller.signal);
+      if (!canApply(generation, controller.signal)) return;
+      for (const [name, raw] of Object.entries(payload.stats || {})) updatePiholeUI(name, raw);
+      updateNetworkSummary(payload.summary);
       updateTimestamp();
-      
-      
-      if (queriesData) {
-        renderQueries(queriesData);
-      }
     } catch (error) {
-      console.error('Failed to refresh dashboard:', error);
+      if (canApply(generation, controller.signal) && error.name !== 'AbortError') console.error('Failed to refresh stats:', error);
     } finally {
-      isFetching = false;
+      if (statsController === controller) statsController = null;
     }
   }
 
-  function startTimer() {
-    if (refreshIntervalId || !appConfig) return;
-    const interval = appConfig.refresh_interval || 5000;
-    refreshIntervalId = setInterval(refreshDashboard, interval);
-    stalenessIntervalId = setInterval(updateStalenessIndicator, 1000);
+  async function refreshQueries() {
+    if (!appConfig?.show_queries || !visible() || (queriesController && !queriesController.signal.aborted)) return;
+    const generation = foregroundGeneration;
+    const controller = new AbortController();
+    queriesController = controller;
+    try {
+      const data = await fetchData('queries?length=50', controller.signal);
+      if (canApply(generation, controller.signal)) renderQueries(data);
+    } catch (error) {
+      if (canApply(generation, controller.signal) && error.name !== 'AbortError') console.error('Failed to refresh queries:', error);
+    } finally {
+      if (queriesController === controller) queriesController = null;
+    }
   }
 
-  function stopTimer() {
-    clearInterval(refreshIntervalId);
-    refreshIntervalId = null;
-    clearInterval(stalenessIntervalId);
-    stalenessIntervalId = null;
+  function stopTimers() {
+    foregroundGeneration++;
+    clearInterval(statsTimer); clearInterval(queriesTimer); clearInterval(stalenessTimer);
+    statsTimer = queriesTimer = stalenessTimer = null;
+    initController?.abort(); statsController?.abort(); queriesController?.abort();
+    initController = statsController = queriesController = null;
   }
 
-  function renderQueries(allQueries) {
-    const container = document.getElementById('background-queries');
-    if (!container) return;
-    const isDark = document.documentElement.classList.contains('dark');
-    container.classList.toggle('dark-mode', isDark);
-
-    const newItems = [];
-    const pendingCursors = {};
-    for (const [piholeName, queries] of Object.entries(allQueries)) {
-      if (!Array.isArray(queries) || queries.length === 0) continue;
-      const lastCursor = lastCursorByPihole[piholeName] ?? -Infinity;
-      let maxCursor = lastCursor;
-      for (let i = 0; i < queries.length; i++) {
-        const q = queries[i];
-        const id = (q.id !== undefined && q.id !== null) ? Number(q.id) : null;
-        const timeVal = (q.time !== undefined && q.time !== null) ? Number(q.time) : (q.timestamp ? Number(q.timestamp) : null);
-        const cursor = (id !== null) ? id : (timeVal !== null ? timeVal : -Infinity);
-        if (cursor > lastCursor) {
-          newItems.push({ piholeName, ...q, __cursor: cursor });
-        }
-        if (cursor > maxCursor) maxCursor = cursor;
-      }
-      pendingCursors[piholeName] = maxCursor;
-    }
-
-    if (newItems.length === 0) return;
-    if (queryFeedPaused) return;
-
-    // Commit cursor advances only now that we know we will render
-    Object.assign(lastCursorByPihole, pendingCursors);
-
-    newItems.sort((a, b) => a.__cursor - b.__cursor);
-
-    const groups = [];
-    for (let i = 0; i < newItems.length; i++) {
-      const item = newItems[i];
-      const domain = item.domain || '';
-      const piholeName = item.piholeName || '';
-      const label = `[${piholeName}] ${domain}`;
-      const blocked = !!item.blocked;
-      if (groups.length > 0 && groups[groups.length - 1].label === label) {
-        const g = groups[groups.length - 1];
-        g.count += 1;
-        g.blocked = g.blocked || blocked;
-      } else {
-        groups.push({ label, domain, piholeName, blocked, count: 1 });
-      }
-    }
-
-    const MAX_ROWS = 100;
-    for (let index = 0; index < groups.length; index++) {
-      const group = groups[index];
-      const lastLi = container.lastElementChild;
-      if (lastLi && lastLi.dataset && lastLi.dataset.label === group.label) {
-        const prev = Number(lastLi.dataset.count || '1');
-        const nextCount = prev + group.count;
-        lastLi.dataset.count = String(nextCount);
-        lastLi.textContent = `${group.label} (x${nextCount})`;
-        if (group.blocked) {
-          lastLi.classList.remove('text-green-600', 'dark:text-green-500');
-          lastLi.classList.add('text-red-600', 'dark:text-red-500');
-          lastLi.style.filter = 'drop-shadow(0 0 2px rgba(220, 38, 38, 0.3))';
-        }
-      } else {
-        const li = document.createElement('li');
-        li.className = 'opacity-0 translate-y-1 text-[10px] leading-tight px-1 whitespace-nowrap';
-        li.style.textOverflow = 'ellipsis';
-        li.dataset.label = group.label;
-        li.dataset.count = String(group.count);
-        li.textContent = group.count > 1 ? `${group.label} (x${group.count})` : group.label;
-        if (group.blocked) {
-          li.classList.add('text-red-600', 'dark:text-red-500');
-          li.style.filter = 'drop-shadow(0 0 2px rgba(220, 38, 38, 0.3))';
-        } else {
-          li.classList.add('text-green-600', 'dark:text-green-500');
-          li.style.filter = 'drop-shadow(0 0 2px rgba(22, 163, 74, 0.25))';
-        }
-        const delay = Math.min(index * 15, 300);
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            li.style.transition = 'opacity .3s ease, transform .3s ease';
-            li.style.opacity = '0.9';
-            li.style.transform = 'translateY(0)';
-          });
-        }, delay);
-        container.appendChild(li);
-      }
-    }
-
-    while (container.children.length > MAX_ROWS) {
-      container.removeChild(container.firstChild);
-    }
+  function startTimers() {
+    if (!appConfig || !visible() || statsTimer) return;
+    statsTimer = setInterval(refreshStats, appConfig.refresh_interval);
+    if (appConfig.show_queries) queriesTimer = setInterval(refreshQueries, appConfig.queries_refresh_interval);
+    stalenessTimer = setInterval(updateStaleness, 1000);
   }
 
   async function init() {
+    if (!visible() || (initController && !initController.signal.aborted)) return;
+    const generation = foregroundGeneration;
+    const controller = new AbortController();
+    initController = controller;
     try {
-      
-      const initData = await fetchData('init');
-      appConfig = initData.config;
-      
-      const mainContent = document.querySelector('main');
-      mainContent.innerHTML = '';
-
-      const enabledPiholes = appConfig.piholes.filter((p) => p.enabled);
-
-      
-      enabledPiholes.forEach((pihole) => {
-        const section = document.createElement('section');
-        section.id = `pihole-${pihole.name}-section`;
-        section.className = 'bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full';
-        
-        const nameContent = pihole.link
-          ? `<a href="${pihole.address}/admin" target="_blank" rel="noopener noreferrer" class="hover:text-teal-500 focus:text-teal-500 outline-none transition-colors" aria-label="Open ${pihole.name} Pi-hole UI">${pihole.name}</a>`
-          : `${pihole.name}`;
-        section.innerHTML = `
-                  <div class="flex justify-between items-baseline mb-3">
-                      <h2 class="text-xl font-semibold text-gray-700 dark:text-cyan-400 pihole-name">${nameContent} <span class="pihole-rate text-sm font-normal text-gray-500 dark:text-gray-400">(--/sec)</span></h2>
-                      <span class="status-dot bg-gray-500"></span>
-                  </div>
-                  <div class="space-y-1.5 text-sm">
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Total Queries</span>
-                          <span class="font-medium text-blue-500 dark:text-blue-400 pihole-total">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Queries Blocked</span>
-                          <span class="font-medium text-red-500 dark:text-red-400 pihole-blocked">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Percent Blocked</span>
-                          <span class="font-medium text-yellow-600 dark:text-yellow-500 pihole-percent">--%</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Cachd / Fwded</span>
-                          <span class="font-medium text-indigo-500 dark:text-indigo-400 pihole-cache">-- / --</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Unique Domains</span>
-                          <span class="font-medium text-orange-500 dark:text-orange-400 pihole-unique">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Active Clients</span>
-                          <span class="font-medium text-purple-500 dark:text-purple-400 pihole-clients">--</span>
-                      </div>
-                      <div class="flex justify-between items-center">
-                          <span class="text-gray-500 dark:text-gray-400">Domains on Lists</span>
-                          <span class="font-medium text-green-600 dark:text-green-500 pihole-domains">--</span>
-                      </div>
-                  </div>
-              `;
-        mainContent.appendChild(section);
-      });
-
-      
-      for (const [piholeName, piholeData] of Object.entries(initData.data)) {
-        await updatePiholeUI(piholeName, piholeData);
-      }
+      const data = await fetchData('init', controller.signal);
+      if (!canApply(generation, controller.signal)) return;
+      appConfig = data.config;
+      main.replaceChildren(); cards.clear();
+      for (const [index, pihole] of (appConfig.piholes || []).entries()) main.append(createCard(pihole, index));
+      if (!cards.size) main.append(element('p', 'empty-message', 'No Pi-holes are enabled. Check config.json.'));
+      for (const [name, raw] of Object.entries(data.data || {})) updatePiholeUI(name, raw);
+      updateNetworkSummary(data.summary);
+      queryPanel.hidden = !appConfig.show_queries;
+      if (data.queries) renderQueries(data.queries);
       updateTimestamp();
-
-      if (initData.queries) {
-        renderQueries(initData.queries);
-      }
-
-      startTimer();
+      startTimers();
     } catch (error) {
-      console.error('Failed to initialize dashboard:', error);
+      if (canApply(generation, controller.signal) && error.name !== 'AbortError') {
+        console.error('Failed to initialize dashboard:', error);
+        timestamp.textContent = 'Unable to initialize dashboard';
+      }
+    } finally {
+      if (initController === controller) initController = null;
+      // A page can become visible before an aborted initialization settles.
+      // Restart only if no newer initialization has already taken ownership.
+      if (!appConfig && visible() && generation !== foregroundGeneration && !initController) init();
     }
   }
 
+  function resumeForeground() {
+    if (!visible()) return;
+    if (!appConfig) { init(); return; }
+    refreshStats(); refreshQueries(); startTimers();
+  }
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      stopTimer();
-    } else {
-      refreshDashboard();
-      startTimer();
-    }
+    if (document.hidden) stopTimers(); else resumeForeground();
   });
+  window.addEventListener('offline', stopTimers);
+  window.addEventListener('online', resumeForeground);
+  window.addEventListener('pagehide', stopTimers);
+  window.addEventListener('pageshow', resumeForeground);
 
-  window.addEventListener('offline', () => stopTimer());
-  window.addEventListener('online', () => { refreshDashboard(); startTimer(); });
-
-  const queriesContainer = document.getElementById('background-queries');
-  if (queriesContainer) {
-    queriesContainer.addEventListener('mouseenter', () => { queryFeedPaused = true; });
-    queriesContainer.addEventListener('mouseleave', () => { queryFeedPaused = false; });
+  queryToggle.addEventListener('click', () => {
+    const open = queryPanel.classList.toggle('is-open');
+    queryToggle.setAttribute('aria-expanded', String(open));
+    queryToggle.textContent = open ? 'Hide queries' : 'Show queries';
+    if (open) queryContainer.scrollTop = queryContainer.scrollHeight;
+  });
+  pauseButton.addEventListener('click', () => { manualPause = !manualPause; updatePauseState(); });
+  if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+    queryContainer.addEventListener('mouseenter', () => { hoverPause = true; updatePauseState(); });
+    queryContainer.addEventListener('mouseleave', () => { hoverPause = false; updatePauseState(); });
   }
-
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').then(
-        (registration) => {
-          console.log('ServiceWorker registration successful with scope: ', registration.scope);
-        },
-        (err) => {
-          console.log('ServiceWorker registration failed: ', err);
-        }
-      );
-    });
-  }
-
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(error => console.warn('Service worker:', error));
+  });
   init();
 });

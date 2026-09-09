@@ -1,8 +1,8 @@
 venv/
 config.json
 node_modules/
-package-lock.json
 dist/
 .env
 *.log
-css/style.css
+__pycache__/
+test-results/

@@ -9,8 +9,12 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+config.json
 *.log
 dist/
 src/
 .vscode/
 .DS_Store
+tests/
+test-results/
+.git/
