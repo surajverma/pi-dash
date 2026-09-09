@@ -32,11 +32,11 @@ Pi-Dash is a lightweight dashboard for monitoring one or more Pi-hole instances.
 
 ## Mobile and desktop layout
 
-Desktop keeps the full metric cards, query rates and sparklines. On narrow screens, Pi-Dash uses smaller spacing, a compact Network Summary, and a condensed card for each Pi-hole. The condensed card shows its name, query rate, health/blocking state, total queries, blocked queries and blocked percentage. Tap **Show details** to reveal all seven metrics shown on desktop; tap **Hide details** to collapse it again.
+Desktop keeps the original 576-pixel-wide dashboard, full metric cards, query rates, sparklines and viewport-wide ambient query feed behind the cards. On narrow screens, Pi-Dash uses smaller spacing, a compact Network Summary, and a condensed card for each Pi-hole. The condensed card shows its name, query rate, health/blocking state, total queries, blocked queries and blocked percentage. Tap **Show details** to reveal all seven metrics shown on desktop; tap **Hide details** to collapse it again.
 
 Compact mode applies below 768 CSS pixels wide, and also at up to 1024 pixels wide when the viewport is 500 pixels high or less (including phone landscape and short resized windows). Below 640 pixels, cards use one column; wider layouts use two. Each details button has an instance-specific accessible name, supports keyboard activation, and preserves its expanded state when resizing.
 
-The query feed always occupies its own space below the cards, so it cannot cover them or become a narrow strip behind them. It is collapsible in compact mode and open on desktop, with a bounded scrolling area and a Pause control. Long values and names wrap instead of overflowing. Short desktop dashboards are centered safely; taller dashboards scroll from the top without clipping the heading or Network Summary. Full details and larger instance lists can require vertical scrolling.
+In compact mode, the query feed occupies its own space below the cards in a collapsible panel with a bounded scrolling area and a Pause control. Desktop retains the original fixed background feed, bottom alignment and fade; it stays behind the opaque cards and pauses on hover. Long values and names wrap instead of overflowing. Short desktop dashboards are centered safely; taller dashboards scroll from the top without clipping the heading or Network Summary. Full details and larger instance lists can require vertical scrolling.
 
 ### Why the latency number was removed
 
@@ -228,7 +228,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The rendered fixture loads the production HTML, CSS and JavaScript with synthetic API responses. It checks 320, 375, 430 and 768 pixel widths, phone landscape, intermediate desktop sizes and desktops up to 1920 pixels, in both themes. It covers compact and expanded cards, long values/names, six Pi-holes, zero Pi-holes, blocking/offline/auth states, feed grouping, card/feed overlap, page overflow, resizing and deterministic visibility/offline races. CI runs these checks and retains screenshots in the `rendered-dashboard` artifact. Playwright is a development-only dependency; Flask and vanilla JavaScript remain the application runtime.
+The rendered fixture loads the production HTML, CSS and JavaScript with synthetic API responses. It checks 320, 375, 430 and 768 pixel widths, phone landscape, intermediate desktop sizes and desktops up to 1920 pixels, in both themes. It covers compact and expanded cards, long values/names, six Pi-holes, zero Pi-holes, blocking/offline/auth states, feed grouping, original desktop width and background stacking, compact card/feed separation, page overflow, resizing and deterministic visibility/offline races. CI runs these checks and retains screenshots in the `rendered-dashboard` artifact. Playwright is a development-only dependency; Flask and vanilla JavaScript remain the application runtime.
 
 For manual visual and keyboard inspection with the same synthetic data:
 

@@ -39,17 +39,17 @@
         </div>
       </section>
       <main class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4"></main>
-      <section id="query-panel" class="query-panel" hidden aria-label="Recent DNS queries">
-        <div class="query-panel-header">
-          <span class="query-panel-title">Recent queries</span>
-          <div class="query-actions">
-            <button id="query-pause" type="button" aria-pressed="false">Pause</button>
-            <button id="query-toggle" type="button" aria-expanded="false" aria-controls="background-queries">Show queries</button>
-          </div>
-        </div>
-        <ul id="background-queries" aria-label="Recent DNS query activity"></ul>
-      </section>
     </div>
+    <section id="query-panel" class="query-panel" hidden aria-label="Recent DNS queries">
+      <div class="query-panel-header">
+        <span class="query-panel-title">Recent queries</span>
+        <div class="query-actions">
+          <button id="query-pause" type="button" aria-pressed="false">Pause</button>
+          <button id="query-toggle" type="button" aria-expanded="false" aria-controls="background-queries">Show queries</button>
+        </div>
+      </div>
+      <ul id="background-queries" aria-label="Recent DNS query activity"></ul>
+    </section>
     <script src="js/dashboard-core.js"></script>
     <script src="js/app.js"></script>
   </body>

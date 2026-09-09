@@ -11,11 +11,22 @@ function geometry(d, stage) {
   assert(bounds(d.querySelector('header')).top >= -1, `${stage}: header is clipped at top`);
   assert(bounds(d.querySelector('#network-summary')).top >= -1, `${stage}: summary is clipped at top`);
   const cards = [...d.querySelectorAll('.instance-card')];
-  const panel = bounds(d.querySelector('#query-panel'));
+  const panelElement = d.querySelector('#query-panel');
+  const panel = bounds(panelElement);
+  const ambient = d.defaultView.getComputedStyle(panelElement).position === 'fixed';
+  if (ambient) {
+    assert(Math.abs(bounds(d.querySelector('#main-wrapper')).width - 576) < 1, `${stage}: original desktop width changed`);
+    assert(Math.abs(panel.left) < 1 && Math.abs(panel.width - width) < 1, `${stage}: background feed is not viewport-wide`);
+    assert(!shown(d.querySelector('.query-panel-header')), `${stage}: desktop feed became a foreground panel`);
+  }
   for (const card of cards) {
     const r = bounds(card);
     assert(r.left >= -1 && r.right <= width + 1, `${stage}: card exceeds viewport`);
-    assert(!overlap(r, panel), `${stage}: query feed overlaps card`);
+    if (!ambient) assert(!overlap(r, panel), `${stage}: query feed overlaps compact card`);
+    else if (r.top < d.documentElement.clientHeight) {
+      const hit = d.elementFromPoint(r.left + 5, Math.max(0, r.top) + 5);
+      assert(hit && card.contains(hit), `${stage}: background queries obscure desktop card`);
+    }
     for (const e of card.querySelectorAll('.metric-label,.metric-value,.pihole-rate,.pihole-health,.instance-toggle')) {
       if (!shown(e)) continue;
       const rects = [...e.getClientRects()];
@@ -46,6 +57,7 @@ async function loadViewport(width, height, scenario, dark) {
 async function checkLayout(width, height, scenario, dark) {
   const d = await loadViewport(width, height, scenario, dark);
   const compact = width <= 767 || width <= 1024 && height <= 500;
+  assert((d.defaultView.getComputedStyle(d.querySelector('#query-panel')).position === 'fixed') === !compact, 'wrong background/panel presentation');
   geometry(d, 'default');
   assert(frame.contentWindow.getComputedStyle(d.body).backgroundColor === (dark ? 'rgb(31, 41, 55)' : 'rgb(243, 244, 246)'), 'theme does not match saved preference');
   const toggles = [...d.querySelectorAll('.instance-toggle')];
