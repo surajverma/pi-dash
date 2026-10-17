@@ -54,7 +54,7 @@ def combine_rankings(snapshots, kind, instance_count):
     denominator = 'total_queries' if kind == 'clients' else 'blocked_queries'
     merged = {}
     total = contributors = 0
-    limited = False
+    sources = []
     for parts in snapshots.values():
         data = parts.get(kind)
         # Negative totals are Pi-hole's privacy sentinel. Never turn these into zeros.
@@ -65,24 +65,39 @@ def combine_rankings(snapshots, kind, instance_count):
             continue
         contributors += 1
         total += number(data[denominator])
-        limited |= len(rows) >= RANK_LIMIT
+        seen = set()
+        counts = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            threshold_count = number(row.get('count'))
+            if threshold_count is not None:
+                counts.append(threshold_count)
             identity = _identity(row.get('ip') if kind == 'clients' else row.get('domain'))
             count = number(row.get('count'), 1)
             if not identity or count is None:
                 continue
+            seen.add(identity)
             label = str(row.get('name') or identity) if kind == 'clients' else identity
             item = merged.setdefault(identity, {'id': identity, 'label': label, 'count': 0})
             if item['label'] == identity and label != identity:
                 item['label'] = label
             item['count'] += int(count)
-    ranked = sorted(merged.values(), key=lambda row: (-row['count'], row['id']))[:5]
+        sources.append((min(counts) if len(rows) >= RANK_LIMIT and counts else 0, seen))
+    ordered = sorted(merged.values(), key=lambda row: (-row['count'], row['id']))
+    ranked = ordered[:5]
+    # Omitted items cannot exceed the smallest returned count on each source.
+    def upper(row):
+        return row['count'] + sum(threshold for threshold, seen in sources if row['id'] not in seen)
+    unseen = sum(threshold for threshold, _ in sources)
+    outside = max([unseen, *[upper(row) for row in ordered[5:]]]) if len(ranked) == 5 else unseen
+    cutoff = ranked[-1]['count'] if ranked else 0
+    limited = contributors > 1 and cutoff < outside
     for row in ranked:
         row['share'] = min(100, row['count'] / total * 100) if total else 0
+        row['approximate'] = upper(row) > row['count']
     return {'items': ranked, 'contributors': contributors, 'instances': instance_count,
-            'partial': contributors < instance_count or limited, 'limited': limited}
+            'partial': contributors < instance_count, 'limited': limited}
 
 
 def combine_history(snapshots, instance_count):

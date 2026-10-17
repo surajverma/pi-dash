@@ -31,6 +31,26 @@ test('rankings safely display full names and graph gaps are not drawn as continu
   dom.window.close();
 });
 
+test('ranking uncertainty is subtle and missing-source warnings remain distinct', () => {
+  const dom = new JSDOM('<ol></ol><p></p>'), d = dom.window.document;
+  const data = {contributors:2, instances:2, partial:false, limited:false,
+    items:[{id:'example.test', label:'example.test', count:120, share:10, approximate:true}]};
+  const render = () => insights.renderRanking(d.querySelector('ol'), d.querySelector('p'), data, 'Domains');
+  render();
+  assert.equal(d.querySelector('.rank-count').textContent, '≥120');
+  assert.match(d.querySelector('button').title, /Count may be higher/);
+  assert.match(d.querySelector('button').getAttribute('aria-label'), /at least 120/);
+  assert.equal(d.querySelector('p').textContent, '');
+  data.limited = true; render();
+  assert.equal(d.querySelector('p').textContent, 'Approximate ranking · counts near the cut-off');
+  data.partial = true; data.contributors = 1; render();
+  assert.equal(d.querySelector('p').textContent, 'Partial data · 1 of 2 reporting');
+  data.partial = false; data.limited = false; data.items[0].approximate = false; render();
+  assert.equal(d.querySelector('.rank-count').textContent, '120');
+  assert.doesNotMatch(d.querySelector('button').title, /Count may be higher/);
+  dom.window.close();
+});
+
 function themeBrowser(saved, blocked = false) {
   const dom = new JSDOM('<meta id="theme-color-meta"><button id="theme-toggle"></button>', {url:'https://test.invalid', runScripts:'outside-only'});
   const w = dom.window;

@@ -49,7 +49,64 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(result['contributors'], 2)
         self.assertTrue(result['partial'])
         limited = {'One': {'domains': {'blocked_queries': RANK_LIMIT, 'domains': [{'domain': str(i), 'count': 1} for i in range(RANK_LIMIT)]}}}
-        self.assertTrue(combine_rankings(limited, 'domains', 1)['limited'])
+        self.assertFalse(combine_rankings(limited, 'domains', 1)['limited'])
+
+    def ranking_source(self, rows, threshold=None, prefix='tail'):
+        rows = [{'domain': name, 'count': count} for name, count in rows]
+        if threshold is not None:
+            rows += [{'domain': f'{prefix}-{i}.test', 'count': threshold} for i in range(RANK_LIMIT - len(rows))]
+        return {'domains': {'blocked_queries': sum(row['count'] for row in rows), 'domains': rows}}
+
+    def test_single_instance_at_limit_is_exact(self):
+        result = combine_rankings({'One': self.ranking_source([(f'top-{i}', 100-i) for i in range(5)], 1)}, 'domains', 1)
+        self.assertFalse(result['limited'])
+        self.assertFalse(result['partial'])
+        self.assertTrue(all(not row['approximate'] for row in result['items']))
+
+    def test_two_truncated_sources_with_clear_top_five_are_exact(self):
+        top = [(f'top-{i}', 1000-i*100) for i in range(5)]
+        result = combine_rankings({'One': self.ranking_source(top, 10, 'one'),
+                                   'Two': self.ranking_source(top, 10, 'two')}, 'domains', 2)
+        self.assertFalse(result['limited'])
+        self.assertFalse(result['partial'])
+        self.assertEqual([row['id'] for row in result['items']], [name for name, _ in top])
+
+    def test_cut_off_candidate_could_overtake_fifth(self):
+        top = [(f'top-{i}', count) for i, count in enumerate((500, 450, 400, 350, 50))]
+        result = combine_rankings({'One': self.ranking_source(top + [('challenger', 99)], 1, 'one'),
+                                   'Two': self.ranking_source(top, 10, 'two')}, 'domains', 2)
+        self.assertTrue(result['limited'])
+        self.assertFalse(result['partial'], 'All sources are reporting; only the ordering is uncertain')
+
+    def test_offline_instance_is_partial_but_not_limited(self):
+        result = combine_rankings({'One': self.ranking_source([(f'top-{i}', 100-i) for i in range(5)], 10)}, 'domains', 2)
+        self.assertTrue(result['partial'])
+        self.assertFalse(result['limited'])
+
+    def test_mixed_sources_mark_understated_counts_without_uncertain_top_five(self):
+        top = [(f'top-{i}', 1000-i*100) for i in range(4)]
+        result = combine_rankings({'One': self.ranking_source(top, 1),
+                                   'Two': self.ranking_source(top + [('only-two', 200)])}, 'domains', 2)
+        self.assertFalse(result['limited'])
+        self.assertFalse(result['partial'])
+        self.assertTrue(result['items'][4]['approximate'])
+        self.assertEqual(result['items'][4]['count'], 200)
+        self.assertTrue(all(not row['approximate'] for row in result['items'][:4]))
+
+    def test_never_seen_candidate_bound_and_equal_cutoff(self):
+        top = [(f'top-{i}', 10) for i in range(5)]
+        result = combine_rankings({'One': self.ranking_source(top, 10, 'one'),
+                                   'Two': self.ranking_source([], 15, 'two')}, 'domains', 2)
+        self.assertTrue(result['limited'], 'A never-seen item may have up to 25 queries')
+        result = combine_rankings({'One': self.ranking_source(top, 10, 'one'),
+                                   'Two': self.ranking_source(top, 10, 'two')}, 'domains', 2)
+        self.assertFalse(result['limited'], 'A tie at the cutoff meets the requested bound')
+
+    def test_fewer_than_five_complete_items_are_exact(self):
+        result = combine_rankings({'One': self.ranking_source([('one', 10)]),
+                                   'Two': self.ranking_source([('two', 5)])}, 'domains', 2)
+        self.assertFalse(result['limited'])
+        self.assertEqual(len(result['items']), 2)
 
     def test_history_aligns_timestamps_and_preserves_missing_coverage(self):
         snapshots = {'One': {'history': {'history': [{'timestamp': 1200, 'total': 10, 'blocked': 2}, {'timestamp': 1800, 'total': 20, 'blocked': 3}]}},

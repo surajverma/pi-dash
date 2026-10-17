@@ -33,8 +33,8 @@
   }
   function coverage(data, noun) {
     if (!data?.contributors) return `${noun} unavailable or hidden by Pi-hole privacy settings`;
-    if (data.limited) return 'Partial ranking · source limit reached';
     if (data.partial) return `Partial data · ${data.contributors} of ${data.instances} reporting`;
+    if (data.limited) return 'Approximate ranking · counts near the cut-off';
     return '';
   }
   function renderRanking(target, status, data, noun) {
@@ -45,9 +45,11 @@
       const button = node(doc, 'button', 'ranking-row');
       button.type = 'button';
       button.title = item.label === item.id ? item.label : `${item.label} (${item.id})`;
+      const count = `${item.approximate ? '≥' : ''}${item.count.toLocaleString()}`;
+      if (item.approximate) button.title += ' · Count may be higher: omitted from another Pi-hole’s top 100';
       button.setAttribute('aria-expanded', 'false');
-      button.setAttribute('aria-label', `${button.title}: ${item.count.toLocaleString()} queries, ${item.share.toFixed(1)} percent. Expand name`);
-      button.append(node(doc, 'span', 'rank-name', item.label), node(doc, 'span', 'rank-count', item.count.toLocaleString()));
+      button.setAttribute('aria-label', `${button.title}: ${item.approximate ? 'at least ' : ''}${item.count.toLocaleString()} queries, ${item.share.toFixed(1)} percent. Expand name`);
+      button.append(node(doc, 'span', 'rank-name', item.label), node(doc, 'span', 'rank-count', count));
       const identity = node(doc, 'span', 'rank-identity', item.id === item.label ? '' : item.id);
       button.append(identity);
       button.addEventListener('click', () => button.setAttribute('aria-expanded', String(button.getAttribute('aria-expanded') !== 'true')));
