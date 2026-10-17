@@ -14,7 +14,11 @@
     data.Unknown._pi_dash.blocking = null;
   }
   const queries = count ? { [names[0]]: Array.from({ length: 36 }, (_, i) => ({ id: i + 1, time: i + 1, domain: i > 32 ? 'repeat.example.org' : `query-${i}.example.org`, blocked: i < 10 })) } : {};
-  const cfg = { refresh_interval: 2000, queries_refresh_interval: 3000, show_queries: true, show_network_summary: true, show_trends: true, piholes: names.map(name => ({ name, link: false, enabled: true })) };
+  const cfg = { refresh_interval: 2000, queries_refresh_interval: 3000, optional_refresh_interval: 30000, show_queries: true, show_network_summary: true, show_network_insights: true, show_device_metrics: true, show_trends: true, piholes: names.map(name => ({ name, link: false, enabled: true })) };
+  const devices = Object.fromEntries(names.map(name => [name, {cpu_percent: 7.2, ram_percent: 38.1, temperature: 48.5, temperature_unit: 'C', uptime_seconds: 92345, upstream_ms: 15.2, unavailable: []}]));
+  const latest = Math.floor(Date.now() / 600000) * 600;
+  const rows = Array.from({length: 5}, (_, i) => ({id: `192.168.1.${i+1}`, label: scenario === 'long' ? `averylongunbrokenclienthostname-${i}.example.test` : ['MacBook','Living Room TV','Home Assistant','Phone','Router'][i], count: 5200 - i * 900, share: 28 - i * 4}));
+  const insights = { history: {points: Array.from({length: 144}, (_, i) => ({timestamp: latest - (143-i)*600, total: Math.round(400 + 150*Math.sin(i/7)), blocked: Math.round(70 + 30*Math.sin(i/8)), contributors: count})), contributors: count, instances: count, partial: false}, clients: {items: rows, contributors: count, instances: count, partial: false}, domains: {items: rows.map((row,i) => ({...row, id: `blocked-${i}.example.test`, label: scenario === 'long' ? `a-very-long-blocked-domain-without-shortening-${i}.example.test` : `blocked-${i}.example.test`})), contributors: count, instances: count, partial: false} };
   const summary = { total_queries: count * sample().queries.total, blocked_queries: count * 23808, percent_blocked: 26.7, cached_queries: count * sample().queries.cached, forwarded_queries: count * sample().queries.forwarded, instances: count, contributing_instances: scenario === 'states' ? 3 : count, offline_instances: scenario === 'states' ? 1 : 0, auth_error_instances: scenario === 'states' ? 1 : 0, blocking_disabled_instances: scenario === 'states' ? 1 : 0, blocking_unknown_instances: scenario === 'states' ? 1 : 0, partial: scenario === 'states' };
   const native = params.get('native') === 'true';
   const realSetInterval = window.setInterval.bind(window), realClearInterval = window.clearInterval.bind(window);
@@ -31,7 +35,7 @@
     const type = url.split('?')[0];
     calls.push({ type, signal: options.signal });
     if (deferred.has(type)) return new Promise((resolve, reject) => Object.assign(deferred.get(type), { resolve, reject }));
-    return { ok: true, json: async () => type === 'init' ? { config: cfg, data, summary, queries } : type === 'data' ? { stats: data, summary } : queries };
+    return { ok: true, json: async () => type === 'init' ? { config: cfg, data, summary, queries } : type === 'data' ? { stats: data, summary } : type === 'devices' ? { devices, updated_at: Date.now()/1000 } : type === 'insights' ? insights : queries };
   };
   if (native) document.addEventListener('DOMContentLoaded', () => {
     const output = document.createElement('output');

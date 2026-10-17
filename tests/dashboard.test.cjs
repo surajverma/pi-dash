@@ -45,6 +45,7 @@ function makeBrowser(options = {}) {
     return { ok: true, json: async () => data };
   };
   window.eval(read('js/dashboard-core.js'));
+  window.eval(read('js/insights.js'));
   window.eval(read('js/app.js'));
   const settle = async () => { await new Promise(resolve => window.setTimeout(resolve, 0)); };
   return {
@@ -99,7 +100,9 @@ test('mobile card starts compact and expands all desktop metrics', async () => {
     const doc = app.window.document;
     const card = doc.querySelector('.instance-card');
     assert.equal(card.querySelectorAll('.mobile-metric').length, 3);
-    assert.equal(card.querySelectorAll('.instance-details .metric-row').length, 7);
+    assert.equal(card.querySelectorAll('.instance-details [data-value]').length, 6);
+    assert.match(card.textContent, /Lists updated/);
+    assert.equal(card.textContent.includes('Unique Domains'), false);
     assert.equal(card.querySelector('.pihole-latency'), null);
     const toggle = card.querySelector('.instance-toggle');
     assert.equal(toggle.getAttribute('aria-expanded'), 'false');

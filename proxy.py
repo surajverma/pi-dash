@@ -7,6 +7,7 @@ import concurrent.futures
 import threading
 import time
 from urllib.parse import urlparse
+from telemetry import RANK_LIMIT, device_view, combine_history, combine_rankings
 
 NO_PASSWORD = "NO_PASSWORD"
 DEFAULT_REFRESH_INTERVAL = 5000
@@ -50,6 +51,12 @@ _blocking_locks = {}
 _stats_cache = {'time': 0.0, 'data': None}
 _queries_cache = {}
 _blocking_cache = {}
+_auth_locks = {}
+_auth_locks_lock = threading.Lock()
+_auth_failures = {}
+_optional_cache = {}
+_optional_locks = {'devices': threading.Lock(), 'insights': threading.Lock()}
+OPTIONAL_REFRESH_MS = 30000
 
 
 def _int(value, default, minimum=100):
@@ -122,34 +129,47 @@ def authenticate_and_get_sid(pihole):
     return None
 
 
-def get_sid(pihole, force=False):
+def get_sid(pihole, force=False, expired_sid=None):
     name = pihole['name']
-    with _sessions_lock:
-        if force:
-            pihole_sessions.pop(name, None)
-        sid = pihole_sessions.get(name)
-    if sid:
-        return sid
-    sid = authenticate_and_get_sid(pihole)
-    if sid:
+    with _auth_locks_lock:
+        lock = _auth_locks.setdefault(name, threading.Lock())
+    # Optional metrics and live stats can arrive together. Share authentication,
+    # including a replacement SID already obtained by another 401 retry.
+    with lock:
         with _sessions_lock:
-            pihole_sessions[name] = sid
-    return sid
+            sid = pihole_sessions.get(name)
+        if sid and (not force or (expired_sid is not None and sid != expired_sid)):
+            return sid
+        failure = _auth_failures.get(name)
+        if failure and time.monotonic() - failure['time'] < 3:
+            raise failure['error']
+        try:
+            sid = authenticate_and_get_sid(pihole)
+        except (requests.exceptions.RequestException, RuntimeError, ValueError) as exc:
+            # Waiting parallel requests share this failure instead of each
+            # spending another full timeout on an unreachable auth endpoint.
+            _auth_failures[name] = {'time': time.monotonic(), 'error': exc}
+            raise
+        if sid:
+            _auth_failures.pop(name, None)
+            with _sessions_lock:
+                pihole_sessions[name] = sid
+        return sid
 
 
-def pihole_get(pihole, path, params=None):
+def pihole_get(pihole, path, params=None, timeout=DEFAULT_REQUEST_TIMEOUT):
     sid = get_sid(pihole)
     if not sid:
         raise RuntimeError('authentication failed')
     args = {
         'headers': headers(sid), 'params': params,
-        'timeout': DEFAULT_REQUEST_TIMEOUT,
+        'timeout': timeout,
         'verify': get_verify_setting(pihole),
     }
     url = pihole['address'].rstrip('/') + path
     response = requests.get(url, **args)
     if response.status_code == 401 and sid != NO_PASSWORD:
-        sid = get_sid(pihole, True)
+        sid = get_sid(pihole, True, expired_sid=sid)
         if not sid:
             raise RuntimeError('re-authentication failed')
         args['headers'] = headers(sid)
@@ -161,14 +181,15 @@ def pihole_get(pihole, path, params=None):
 # -- Frontend routes --
 @bp.route('/')
 def index():
-    icon = (manifest_data.get('icons') or [{}])[0].get('src', '')
-    return index_template.replace('<head>', f'<head>\n    <base href="{escape(html_base)}">').replace('{{ICON_URL}}', escape(icon))
+    return index_template.replace('<head>', f'<head>\n    <base href="{escape(html_base)}">')
 
 
 @bp.route('/manifest.json')
 def serve_manifest():
     data = manifest_data.copy()
     data['start_url'] = html_base
+    data['scope'] = html_base
+    data['id'] = html_base
     return jsonify(data)
 
 
@@ -189,7 +210,12 @@ def send_js(path):
 
 @bp.route('/favicon.ico')
 def favicon():
-    return '', 204
+    return send_from_directory(os.path.join(APP_ROOT, 'icons'), 'favicon.ico')
+
+
+@bp.route('/icons/<path:path>')
+def send_icon(path):
+    return send_from_directory(os.path.join(APP_ROOT, 'icons'), path)
 
 
 # -- API helpers --
@@ -210,6 +236,10 @@ def filtered_config():
         'show_queries': config.get('show_queries', False),
         'show_network_summary': config.get('show_network_summary', True),
         'show_trends': config.get('show_trends', True),
+        'show_network_insights': config.get('show_network_insights', True),
+        'show_device_metrics': config.get('show_device_metrics', True),
+        'show_unique_domains': config.get('show_unique_domains', False),
+        'optional_refresh_interval': OPTIONAL_REFRESH_MS,
         'piholes': out,
     }
 
@@ -395,6 +425,63 @@ def network_summary(data):
         'offline_instances': offline,
         'partial': contributing != len(data),
     }
+
+
+def fetch_optional(kind):
+    """Refresh slow optional data separately; never block /init or /data on it."""
+    with _optional_locks[kind]:
+        cached = _optional_cache.get(kind)
+        if cached and time.monotonic() - cached['time'] < OPTIONAL_REFRESH_MS / 1000:
+            return cached['data']
+        items = enabled()
+        parts = {p['name']: {} for p in items}
+        paths = (
+            [('system', '/api/info/system', None), ('sensors', '/api/info/sensors', None),
+             ('upstreams', '/api/stats/upstreams', None)] if kind == 'devices' else
+            [('history', '/api/history', None),
+             ('clients', '/api/stats/top_clients', {'count': RANK_LIMIT}),
+             ('domains', '/api/stats/top_domains', {'count': RANK_LIMIT, 'blocked': 'true'})]
+        )
+
+        def read_part(pihole, key, path, params):
+            try:
+                data = pihole_get(pihole, path, params=params, timeout=4).json()
+                if isinstance(data, dict) and 'error' not in data:
+                    return pihole['name'], key, data
+            except (requests.exceptions.RequestException, RuntimeError, ValueError):
+                pass
+            return pihole['name'], key, None
+
+        if items:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(items) * len(paths))) as pool:
+                futures = [pool.submit(read_part, p, *path) for p in items for path in paths]
+                for future in concurrent.futures.as_completed(futures):
+                    name, key, data = future.result()
+                    if data is not None:
+                        parts[name][key] = data
+        if kind == 'devices':
+            result = {'devices': {name: device_view(data) for name, data in parts.items()}}
+        else:
+            result = {'history': combine_history(parts, len(items)),
+                      'clients': combine_rankings(parts, 'clients', len(items)),
+                      'domains': combine_rankings(parts, 'domains', len(items))}
+        result['updated_at'] = time.time()
+        _optional_cache[kind] = {'time': time.monotonic(), 'data': result}
+        return result
+
+
+@bp.route('/devices')
+def devices():
+    if not config.get('show_device_metrics', True):
+        return jsonify({'devices': {}}), 200, {'Cache-Control': 'no-store'}
+    return jsonify(fetch_optional('devices')), 200, {'Cache-Control': 'no-store'}
+
+
+@bp.route('/insights')
+def insights():
+    if not config.get('show_network_summary', True) or not config.get('show_network_insights', True):
+        return jsonify({'disabled': True}), 200, {'Cache-Control': 'no-store'}
+    return jsonify(fetch_optional('insights')), 200, {'Cache-Control': 'no-store'}
 
 
 # -- API routes --

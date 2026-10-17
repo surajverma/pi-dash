@@ -18,6 +18,7 @@ function setup(fetchImpl) {
   w.clearInterval = id => timers.delete(id);
   w.fetch = fetchImpl;
   w.eval(read('js/dashboard-core.js'));
+  w.eval(read('js/insights.js'));
   w.eval(read('js/app.js'));
   const settle = () => new Promise(resolve => w.setTimeout(resolve, 0));
   return {

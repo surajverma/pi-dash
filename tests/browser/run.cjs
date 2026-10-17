@@ -24,14 +24,14 @@ const root = path.resolve(__dirname, '../..');
     if (await page.locator('#result').getAttribute('data-status') !== 'passed') process.exitCode = 1;
     // Actual navigator offline/online events, with real browser timers.
     await page.goto('http://localhost:5011/fixture/?native=true');
-    await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":3'));
+    await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":4'));
     await page.context().setOffline(true);
     await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":0'));
     const offlineCalls = JSON.parse(await page.locator('#native-polling').innerText()).calls;
     await page.waitForTimeout(3200);
     if (JSON.parse(await page.locator('#native-polling').innerText()).calls !== offlineCalls) throw new Error('Browser offline state still polls');
     await page.context().setOffline(false);
-    await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":3'));
+    await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":4'));
     console.log('Real browser offline/online polling: passed');
     // Keep reviewable screenshots of production markup at actual top-level viewport sizes.
     for (const [width, height] of [[320,568],[375,667],[430,932],[768,375],[768,1024],[1440,900]]) {

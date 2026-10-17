@@ -14,6 +14,8 @@ Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole insta
 
 - **Multiple Pi-hole Support:** Monitor all your Pi-hole instances from a single dashboard.
 - **Network Summary:** View combined query, blocked, cached, and forwarded totals across reporting Pi-holes.
+- **Network Insights:** Desktop shows query history, top combined clients, and top blocked domains in three columns. Mobile loads these when you expand Network Insights.
+- **Device Health:** CPU, RAM, temperature, system uptime, upstream response time, and blocklist update age, grouped separately from the DNS counters. Mobile keeps these inside Show details.
 - **Pi-hole Status:** See reachability, authentication errors, and blocking ON/OFF state for each instance.
 - **Responsive Design:** Desktop shows the full dashboard and ambient query feed. Mobile shows critical metrics in compact cards, with an accessible control to expand all available metrics.
 - **Live Query Feed:** Optionally show recent allowed and blocked domains. Consecutive duplicate queries are grouped with `(x2)`, `(x3)`, and similar counts.
@@ -48,6 +50,9 @@ Copy `config-example.json` to `config.json` and edit it for your network. The ex
   "show_queries": false,
   "show_network_summary": true,
   "show_trends": true,
+  "show_network_insights": true,
+  "show_device_metrics": true,
+  "show_unique_domains": false,
   "piholes": [
     {
       "name": "Primary",
@@ -72,6 +77,9 @@ Copy `config-example.json` to `config.json` and edit it for your network. The ex
 | `show_queries` | `false` | Show the live DNS query feed. Allowed queries are green and blocked queries are red. |
 | `show_network_summary` | `true` | Show combined statistics from all reporting Pi-holes. |
 | `show_trends` | `true` | Show short, in-memory query-rate sparklines. |
+| `show_network_insights` | `true` | Show combined history and top-five rankings inside Network Summary. Requires `show_network_summary`. |
+| `show_device_metrics` | `true` | Show optional hardware readings and upstream response time in instance details. |
+| `show_unique_domains` | `false` | Include Unique Domains in instance details. Domains on Lists is always retained. |
 | `piholes` | `[]` | List of Pi-hole instances to monitor. |
 
 When `cache_ttl` is omitted, Pi-Dash calculates it as half of the shortest refresh interval, with a minimum of 100 ms and a maximum of 1000 ms. The values in `config-example.json` are recommended example settings; omitted options use the defaults above.
@@ -109,11 +117,23 @@ The Compose example below passes this variable to Pi-Dash. For Docker Run, use `
 
 The Network Summary includes only additive DNS counters: total queries, blocked queries, cached queries, and forwarded queries. It does not combine active clients, unique domains, or domains on lists because those values can overlap between Pi-holes. If an instance is unavailable, the summary is marked as partial.
 
+Desktop keeps all instance details open, with DNS activity and device health grouped separately. Mobile retains the three important counters and Show details. The desktop query feed stays in the background; mobile retains its separate Recent queries control.
+
+Network Insights uses Pi-hole's rolling in-memory reporting window (normally about 24 hours; retention and privacy settings can affect it). History is aligned into ten-minute buckets, with at most the latest 24 hours drawn. Missing buckets are not filled with invented zeros. Rankings combine matching client addresses or normalized domains before selecting the top five. Client names are labels, so unrelated devices with the same name are not merged. Tap/click a ranking row to reveal its full name and address. Counts are observed DNS requests, not deduplicated user activity; chained Pi-holes can observe the same request more than once.
+
+Up to 1,000 source entries per ranking and Pi-hole are combined. If this limit is reached, the ranking is explicitly marked partial. Pi-hole's own excluded-client/domain and privacy settings remain respected. Shares use the corresponding total queries or blocked queries, so the five visible rows need not add up to 100%. Missing instances and unavailable sections are labelled independently.
+
+Device metrics and network insights load independently of the fast DNS counters, refresh at most every 30 seconds per browser, and share a separate 30-second server cache. Mobile requests them only while the relevant section is expanded. All polling pauses while the page is hidden or offline. An unavailable sensor or unsupported API does not mark a working DNS server offline; its reading displays Unavailable. Healthy status dots pulse gently only while the latest DNS snapshot is fresh, and respect reduced-motion preferences.
+
+CPU is Pi-hole's reported total CPU use divided by the number of processors, displayed on a device-wide 0–100% scale. RAM and system uptime are the system readings, not the FTL process figures. Container installations report the system visible to Pi-hole and may not expose temperature sensors. Upstream response is the query-count-weighted mean response time reported by real upstream servers, converted from seconds to milliseconds; it excludes local and cached answers. Lists updated uses Pi-hole's gravity timestamp. Cached / Forwarded remains the raw pair of counters (Pi-hole's cached count can include locally configured answers).
+
+The dashboard follows the system color scheme by default and updates when it changes. Use the small Theme control to cycle through System, Light, and Dark. Existing saved Light/Dark preferences remain respected; select System to return to automatic switching.
+
 When the query feed is enabled, it displays recent queries while the dashboard is visible and online. Only consecutive entries with the same Pi-hole, domain, and blocked/allowed state are grouped. The feed is intended as a live overview; use Pi-hole's query log for complete history.
 
 ### 2. `manifest.json` (Optional)
 
-This file contains the Progressive Web App name, colors, and icon:
+This optional file customizes the Progressive Web App name and colors. Pi-Dash bundles its own V2 transparent PNG icons, served from the dashboard's origin:
 
 ```json
 {
@@ -126,15 +146,24 @@ This file contains the Progressive Web App name, colors, and icon:
   "theme_color": "#06b6d4",
   "icons": [
     {
-      "src": "https://pi.hole/admin/img/logo.svg",
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
 ```
 
-Replace `icons.src` with a direct link to your Pi-hole logo or preferred icon.
+No Pi-hole hostname or port is needed for these icons. Manifest start URL, scope, and app identity follow `base_path`, including subpath installations. Apple touch and 16/32-pixel favicon assets are also bundled. The normal app icons are transparent and declare `purpose: any`; they are not labelled maskable.
+
+PWA installation requires HTTPS (or localhost), and browser/platform installation behavior varies. If you mount a custom `manifest.json` from an older installation, update its icons to the local entries above or remove the mount to use the bundled manifest. A mounted old manifest continues to override the packaged defaults. The service worker refreshes the app shell and never caches the DNS, ranking, or hardware API responses.
 
 ---
 
