@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-dashboard-cache-v12-plain-ranking-counts';
+const CACHE_NAME = 'pi-dashboard-cache-v13-larger-maskable-icon';
 const APP_SHELL = [
   '{{CACHE_URL}}',
   '{{CACHE_URL}}css/style.css',

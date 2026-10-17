@@ -55,13 +55,17 @@ const root = path.resolve(__dirname, '../..');
       for(let y=0;y<512;y++)for(let x=0;x<512;x++){
         const i=(y*512+x)*4;
         if(pixels[i+3]!==255)return false;
-        const artwork=pixels[i]!==31||pixels[i+1]!==41||pixels[i+2]!==55;
-        if(artwork&&Math.hypot(x+.5-256,y+.5-256)>204.8)return false;
+        const whiteBar=pixels[i]>240&&pixels[i+1]>240&&pixels[i+2]>240;
+        const darkHole=pixels[i]===20&&pixels[i+1]===30&&pixels[i+2]===36;
+        // The green and red panel edges may extend beyond the safe circle.
+        if((whiteBar||darkHole)&&Math.hypot(x+.5-256,y+.5-256)>204.8)return false;
       }
-      return true;
+      // The middle white bar covers the centre (256, 252.56); sample the exposed hole above it.
+      const holePixel=(205*512+256)*4;
+      return pixels[holePixel]===20&&pixels[holePixel+1]===30&&pixels[holePixel+2]===36;
     });
-    if(!maskable)throw new Error('Maskable icon has transparency or artwork outside its safe circle');
-    console.log('Maskable icon opacity and safe circle: passed');
+    if(!maskable)throw new Error('Maskable icon has transparency, a missing dark hole, or important content outside its safe circle');
+    console.log('Maskable icon opacity and safe zone: passed');
     // Actual navigator offline/online events, with real browser timers.
     await page.goto('http://localhost:5011/fixture/?native=true');
     await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":4'));

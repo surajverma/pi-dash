@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Larger Android home-screen icon (maskable icon no longer over-padded). Reinstall the app or wait for Chrome to refresh it.
 - Split the backend into `pi_dash/` and move shipped assets to `web/`; native startup is now `python -m pi_dash`, with Gunicorn using `pi_dash.app:app`. Rename the insights script to `network-insights.js` and refresh the service-worker cache.
 - Preserve `/app/config.json` and optional `/app/manifest.json` mounts, add `PI_DASH_CONFIG` and `PI_DASH_MANIFEST` path overrides, and document restart requirements. Docker copies only runtime dependencies, the backend package and web assets, retaining one worker and four threads.
 - Confirm combined top-five rankings against bounds for omitted source entries rather than warning whenever a source reaches 100 rows. Counts remain plain numbers; ranking uncertainty and missing-source warnings remain separate.
