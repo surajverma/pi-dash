@@ -17,4 +17,5 @@ src/
 .DS_Store
 tests/
 test-results/
+docs/screenshots/
 .git/

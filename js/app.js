@@ -396,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await fetchData('init', controller.signal);
       if (!canApply(generation, controller.signal)) return;
       appConfig = data.config;
+      document.getElementById('main-wrapper').classList.toggle('has-network-insights', Boolean(insightsEnabled()));
       pollingPaused = false;
       optionalUpdated.clear();
       insightsPanel.hidden = !insightsEnabled();

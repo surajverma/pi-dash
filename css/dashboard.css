@@ -2,7 +2,8 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
 html { min-height: 100%; }
 /* Auto margins center short dashboards but become zero when content needs scrolling. */
 body { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; padding: 1rem; }
-#main-wrapper { flex: none; max-width: 56rem; margin-block: auto; }
+#main-wrapper { flex: none; max-width: 36rem; margin-block: auto; }
+#main-wrapper.has-network-insights { max-width: 56rem; }
 html, body { overscroll-behavior-y: contain; }
 [hidden] { display: none !important; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
@@ -108,6 +109,7 @@ html, body { overscroll-behavior-y: contain; }
 @media (max-width: 767px), (max-width: 1024px) and (max-height: 500px) {
     body { display: block; padding: .75rem; }
     #main-wrapper { max-width: none; width: 100%; margin: 0 auto; transform: none !important; }
+    #main-wrapper.has-network-insights { max-width: none; }
     #main-wrapper > header { margin-bottom: .75rem; }
     #main-wrapper > header h1 { font-size: 1.375rem; line-height: 1.75rem; }
     #network-summary { padding: .75rem; margin-bottom: .75rem; }
@@ -161,6 +163,7 @@ html, body { overscroll-behavior-y: contain; }
 @media (prefers-reduced-motion: reduce) { body { transition: none; } .status-dot.is-live { animation: none; } }
 
 @media (min-width: 768px) and (min-height: 501px) {
+    #main-wrapper:not(.has-network-insights) .device-group .metric-row { flex-direction: column; align-items: center; gap: 0; }
     #main-wrapper > header { margin-bottom: .625rem; }
     #network-summary { margin-bottom: .625rem; padding: .75rem; }
     .instance-card { padding: .75rem; }

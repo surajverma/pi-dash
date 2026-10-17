@@ -24,16 +24,29 @@ Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole insta
 - **Lightweight and Fast:** Built with Flask and vanilla JavaScript, with no database or frontend framework.
 - **Dark Mode and PWA Support:** Works with your preferred color scheme and can be installed as a Progressive Web App.
 
-## Mobile View in Dark Mode
-<img width="1170" height="684" alt="image" src="https://github.com/user-attachments/assets/b2b78439-bb6b-41c5-b61f-739ab071b871" />
+## Screenshots
 
+All screenshots use fictional sample data and the current dashboard. The optional query feed is enabled for illustration; no real Pi-hole addresses, credentials, or query history are included.
 
+### Desktop: default view (light mode)
 
+Network insights are off; device metrics are on. The dashboard keeps its original 576px maximum width. Captured at 1366×768.
 
-## Desktop view in Light mode
-<img width="2485" height="1468" alt="image" src="https://github.com/user-attachments/assets/4e2d39b4-9b4f-40a3-8c0e-a25bdd337cc8" />
+![Desktop default view with network totals and centered hardware readings](docs/screenshots/desktop-default-light.png)
 
+### Desktop: optional network insights (dark mode)
 
+Set `"show_network_insights": true` to add the history graph, top clients, and top blocked domains. Only this view expands the desktop dashboard to a maximum width of 896px.
+
+![Desktop with optional query history, top clients, and top blocked domains](docs/screenshots/desktop-insights-dark.png)
+
+### Mobile: compact and expanded views (dark mode)
+
+Mobile starts compact. Tap **Show details** to reveal instance counters and hardware readings.
+
+| Compact default | First instance expanded |
+| --- | --- |
+| <img src="docs/screenshots/mobile-default-dark.png" width="340" alt="Mobile default view with compact Pi-hole cards"> | <img src="docs/screenshots/mobile-details-dark.png" width="340" alt="Mobile view with the first Pi-hole details and hardware readings expanded"> |
 
 ## Configuration
 
@@ -64,6 +77,13 @@ Copy `config-example.json` to `config.json` and edit it for your network. The ex
   ]
 }
 ```
+
+The example includes the two new flags:
+
+- `show_network_insights: false` keeps the graph and both rankings hidden and skips their API requests. Change it to `true` to enable them.
+- `show_device_metrics: true` enables CPU, RAM, temperature, and uptime in each instance's details. Set it to `false` to hide them and stop their API requests.
+
+These defaults also apply when the flags are omitted from older configurations. The existing `show_network_summary` flag still defaults to `true` and controls the original summary counters.
 
 #### Dashboard options
 
@@ -238,6 +258,14 @@ npm run build:css
 npx playwright install chromium
 npm run test:browser
 ```
+
+To refresh the README screenshots using production markup and fictional data:
+
+```bash
+npm run capture:screenshots
+```
+
+This uses the same Playwright Chromium installation as the rendered tests and writes the four images to `docs/screenshots/`.
 
 ## Credits
 
