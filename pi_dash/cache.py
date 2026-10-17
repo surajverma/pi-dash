@@ -85,11 +85,14 @@ def fetch_one(pihole):
         }
         return name, data
     except RuntimeError as exc:
-        return name, {'error': str(exc), '_pi_dash': {'health': 'auth_error'}}
+        logger.exception('Pi-hole authentication failed')
+        return name, {'error': 'Authentication failed', '_pi_dash': {'health': 'auth_error'}}
     except (requests.exceptions.RequestException, ValueError) as exc:
         status = getattr(getattr(exc, 'response', None), 'status_code', None)
         health = 'auth_error' if status in (401, 403) else 'unreachable'
-        return name, {'error': str(exc), '_pi_dash': {'health': health}}
+        logger.exception('Pi-hole stats request failed')
+        message = 'Authentication failed' if health == 'auth_error' else 'Pi-hole unreachable'
+        return name, {'error': message, '_pi_dash': {'health': health}}
 
 
 def _stats_uncached():

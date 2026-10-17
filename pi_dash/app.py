@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, send_from_directory, request, Blueprint
 from markupsafe import escape
 import os
-from . import cache, config as settings
+from . import cache, config as settings, pihole
 from .aggregate import network_summary
 
 app = Flask(__name__)
@@ -74,7 +74,8 @@ def init():
             result['queries'] = cache.fetch_queries(50)
         return jsonify(result)
     except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+        app.logger.exception('API request failed: %s', request.path)
+        return jsonify({'error': pihole.error_message(exc)}), 500
 
 
 @bp.route('/data')
@@ -93,7 +94,8 @@ def data():
             result['queries'] = cache.fetch_queries(length)
         return jsonify(result)
     except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+        app.logger.exception('API request failed: %s', request.path)
+        return jsonify({'error': pihole.error_message(exc)}), 500
 
 
 @bp.route('/queries')
@@ -102,7 +104,8 @@ def queries():
         length = settings._bounded_int(request.args.get('length'), 50, 1, 200)
         return jsonify(cache.fetch_queries(length))
     except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
+        app.logger.exception('API request failed: %s', request.path)
+        return jsonify({'error': pihole.error_message(exc)}), 500
 
 
 @bp.route('/health')

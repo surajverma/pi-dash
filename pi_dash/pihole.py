@@ -11,6 +11,15 @@ _auth_locks_lock = threading.Lock()
 _auth_failures = {}
 
 
+def error_message(exc):
+    status = getattr(getattr(exc, 'response', None), 'status_code', None)
+    if status in (401, 403):
+        return 'Authentication failed'
+    if isinstance(exc, requests.exceptions.RequestException):
+        return 'Pi-hole unreachable'
+    return 'Internal error'
+
+
 def headers(sid):
     return {} if sid == NO_PASSWORD else {'X-FTL-SID': sid}
 
