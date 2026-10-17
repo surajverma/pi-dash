@@ -115,3 +115,43 @@ def combine_history(snapshots, instance_count):
         points = [p for p in points if p['timestamp'] >= points[-1]['timestamp'] - 86400]
     return {'points': points, 'contributors': contributors, 'instances': instance_count,
             'partial': contributors < instance_count or any(p['contributors'] < instance_count for p in points)}
+
+
+def network_summary(data):
+    total = blocked = cached = forwarded = healthy = offline = auth_errors = disabled = unknown = 0
+    contributing = 0
+    for item in data.values():
+        if item.get('error') or not isinstance(item.get('queries'), dict):
+            if item.get('_pi_dash', {}).get('health') == 'auth_error':
+                auth_errors += 1
+            else:
+                offline += 1
+            continue
+        contributing += 1
+        queries = item['queries']
+        total += int(queries.get('total') or 0)
+        blocked += int(queries.get('blocked') or 0)
+        cached += int(queries.get('cached') or 0)
+        forwarded += int(queries.get('forwarded') or 0)
+        blocking = item.get('_pi_dash', {}).get('blocking')
+        if blocking is False:
+            disabled += 1
+        elif blocking is None:
+            unknown += 1
+        else:
+            healthy += 1
+    return {
+        'total_queries': total,
+        'blocked_queries': blocked,
+        'percent_blocked': round(blocked / total * 100, 1) if total else 0,
+        'cached_queries': cached,
+        'forwarded_queries': forwarded,
+        'instances': len(data),
+        'contributing_instances': contributing,
+        'healthy_instances': healthy,
+        'blocking_disabled_instances': disabled,
+        'blocking_unknown_instances': unknown,
+        'auth_error_instances': auth_errors,
+        'offline_instances': offline,
+        'partial': contributing != len(data),
+    }

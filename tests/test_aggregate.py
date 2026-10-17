@@ -7,6 +7,7 @@ from threading import Event
 from unittest.mock import patch
 
 import pi_dash.app as proxy
+from pi_dash import config as settings, cache, pihole as pihole_api, aggregate
 from pi_dash.aggregate import combine_history, combine_rankings, device_view, RANK_LIMIT
 
 
@@ -62,34 +63,34 @@ class AggregateTests(unittest.TestCase):
 
 class OptionalRouteTests(unittest.TestCase):
     def setUp(self):
-        self.original = proxy.config
-        proxy.config = {'piholes': [{'name': 'One', 'address': 'https://test.invalid', 'password': 'secret'}]}
-        proxy._optional_cache.clear()
+        self.original = settings.config
+        settings.config = {'piholes': [{'name': 'One', 'address': 'https://test.invalid', 'password': 'secret'}]}
+        cache._optional_cache.clear()
 
     def tearDown(self):
-        proxy.config = self.original
-        proxy._optional_cache.clear()
+        settings.config = self.original
+        cache._optional_cache.clear()
 
     def test_disabled_routes_do_not_contact_piholes(self):
-        proxy.config.update(show_device_metrics=False, show_network_insights=False)
-        with proxy.app.test_client() as client, patch.object(proxy, 'pihole_get') as fetch:
+        settings.config.update(show_device_metrics=False, show_network_insights=False)
+        with proxy.app.test_client() as client, patch.object(pihole_api, 'pihole_get') as fetch:
             for path in ('/devices', '/insights'):
                 self.assertEqual(client.get(path).headers['Cache-Control'], 'no-store')
             fetch.assert_not_called()
 
     def test_missing_flags_preserve_simple_defaults(self):
-        cfg = proxy.filtered_config()
+        cfg = settings.filtered_config()
         self.assertTrue(cfg['show_network_summary'])
         self.assertFalse(cfg['show_network_insights'])
         self.assertTrue(cfg['show_device_metrics'])
         self.assertNotIn('show_unique_domains', cfg)
-        with proxy.app.test_client() as client, patch.object(proxy, 'fetch_optional', return_value={'devices': {}}) as fetch:
+        with proxy.app.test_client() as client, patch.object(cache, 'fetch_optional', return_value={'devices': {}}) as fetch:
             self.assertTrue(client.get('/insights').get_json()['disabled'])
             fetch.assert_not_called()
             self.assertEqual(client.get('/devices').status_code, 200)
             fetch.assert_called_once_with('devices')
-        proxy.config.update(show_network_summary=False, show_network_insights=True)
-        with proxy.app.test_client() as client, patch.object(proxy, 'fetch_optional') as fetch:
+        settings.config.update(show_network_summary=False, show_network_insights=True)
+        with proxy.app.test_client() as client, patch.object(cache, 'fetch_optional') as fetch:
             self.assertTrue(client.get('/insights').get_json()['disabled'])
             fetch.assert_not_called()
 
@@ -97,7 +98,7 @@ class OptionalRouteTests(unittest.TestCase):
         import pathlib
         import struct
         import xml.etree.ElementTree as ET
-        icons = pathlib.Path(proxy.WEB_ROOT) / 'icons'
+        icons = pathlib.Path(settings.WEB_ROOT) / 'icons'
         for name in ('icon.svg', 'favicon.svg'):
             svg = ET.parse(icons / name).getroot()
             self.assertEqual(svg.attrib['viewBox'], '0 0 512 512')
@@ -114,10 +115,10 @@ class OptionalRouteTests(unittest.TestCase):
         def read(pihole, path, **kwargs):
             if path.endswith('system'):
                 return Response()
-            raise proxy.requests.exceptions.Timeout('timeout')
-        with patch.object(proxy, 'pihole_get', side_effect=read) as fetch:
+            raise pihole_api.requests.exceptions.Timeout('timeout')
+        with patch.object(pihole_api, 'pihole_get', side_effect=read) as fetch:
             with ThreadPoolExecutor(max_workers=2) as pool:
-                results = list(pool.map(lambda _: proxy.fetch_optional('devices'), range(2)))
+                results = list(pool.map(lambda _: cache.fetch_optional('devices'), range(2)))
             self.assertEqual(fetch.call_count, 2)
             fresh = next(result for result in results if not result.get('refreshing'))
             self.assertEqual(fresh['devices']['One']['uptime_seconds'], 100)
@@ -125,38 +126,38 @@ class OptionalRouteTests(unittest.TestCase):
             self.assertNotIn('secret', json.dumps(results[0]))
 
     def test_init_does_not_wait_for_optional_metrics(self):
-        with proxy.app.test_client() as client, patch.object(proxy, 'fetch_stats', return_value={}), patch.object(proxy, 'fetch_optional') as optional:
+        with proxy.app.test_client() as client, patch.object(cache, 'fetch_stats', return_value={}), patch.object(cache, 'fetch_optional') as optional:
             self.assertEqual(client.get('/init').status_code, 200)
             optional.assert_not_called()
 
     def test_parallel_auth_and_401_share_one_replacement_session(self):
-        pihole = proxy.config['piholes'][0]
+        pihole = settings.config['piholes'][0]
         entered, release = Event(), Event()
-        proxy.pihole_sessions.pop('One', None)
+        pihole_api.pihole_sessions.pop('One', None)
 
         def auth(_):
             entered.set()
             release.wait(3)
             return 'fresh'
-        with patch.object(proxy, 'authenticate_and_get_sid', side_effect=auth) as fetch:
+        with patch.object(pihole_api, 'authenticate_and_get_sid', side_effect=auth) as fetch:
             with ThreadPoolExecutor(max_workers=2) as pool:
-                first = pool.submit(proxy.get_sid, pihole)
+                first = pool.submit(pihole_api.get_sid, pihole)
                 self.assertTrue(entered.wait(2))
-                second = pool.submit(proxy.get_sid, pihole)
+                second = pool.submit(pihole_api.get_sid, pihole)
                 release.set()
                 self.assertEqual(first.result(3), second.result(3))
-            self.assertEqual(proxy.get_sid(pihole, True, expired_sid='old'), 'fresh')
+            self.assertEqual(pihole_api.get_sid(pihole, True, expired_sid='old'), 'fresh')
             self.assertEqual(fetch.call_count, 1)
-        proxy.pihole_sessions.pop('One', None)
+        pihole_api.pihole_sessions.pop('One', None)
 
     def test_auth_timeout_is_shared_without_changing_its_error_type(self):
         pihole = {'name': 'Timeout', 'address': 'https://timeout.invalid'}
-        with patch.object(proxy, 'authenticate_and_get_sid', side_effect=proxy.requests.exceptions.Timeout('unreachable')) as auth:
+        with patch.object(pihole_api, 'authenticate_and_get_sid', side_effect=pihole_api.requests.exceptions.Timeout('unreachable')) as auth:
             for _ in range(3):
-                with self.assertRaises(proxy.requests.exceptions.Timeout):
-                    proxy.get_sid(pihole)
+                with self.assertRaises(pihole_api.requests.exceptions.Timeout):
+                    pihole_api.get_sid(pihole)
             self.assertEqual(auth.call_count, 1)
-        proxy._auth_failures.pop('Timeout', None)
+        pihole_api._auth_failures.pop('Timeout', None)
 
     def test_local_icons_manifest_and_subpath_assets(self):
         # Import with a temporary, in-memory subpath config in an isolated process.
@@ -169,6 +170,7 @@ def read(path, *args, **kwargs):
     return original(path, *args, **kwargs)
 builtins.open = read
 import pi_dash.app as proxy
+from pi_dash import config as settings, cache, pihole as pihole_api, aggregate
 with proxy.app.test_client() as client:
     manifest = client.get('/dash/manifest.json').get_json()
     assert manifest['id'] == manifest['scope'] == manifest['start_url'] == '/dash/'
@@ -184,7 +186,7 @@ with proxy.app.test_client() as client:
     assert '{{CACHE_URL}}' not in sw
     assert "'devices', 'insights'" in sw
 '''
-        result = subprocess.run([sys.executable, '-c', script], cwd=proxy.APP_ROOT, capture_output=True, text=True)
+        result = subprocess.run([sys.executable, '-c', script], cwd=settings.APP_ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
