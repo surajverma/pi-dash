@@ -18,7 +18,7 @@ const root = path.resolve(__dirname, '../web');
       await page.setContent('<style>html,body{margin:0;background:transparent}svg{display:block;width:100%;height:100%}</style>'+svg);
       await page.screenshot({path:path.join(root,'icons',size===180?'apple-touch-icon.png':`icon-${size}.png`),omitBackground:true});
     }
-    const maskable = source.replace(/<svg[^>]*>/, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#1f2937"/><g transform="translate(35.84 35.84) scale(.86)">').replace('</svg>', '</g></svg>');
+    const maskable = source.replace(/<svg[^>]*>/, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#ac0000"/><rect width="512" height="150" fill="#20b523"/><rect y="340" width="512" height="172" fill="#ff0713"/><g transform="translate(20.48 20.48) scale(.92)">').replace('</svg>', '</g></svg>');
     fs.writeFileSync(path.join(root,'icons/icon-maskable.svg'),maskable);
     await page.setViewportSize({width:512,height:512});
     await page.setContent('<style>html,body{margin:0}svg{display:block;width:100%;height:100%}</style>'+maskable);
