@@ -52,24 +52,38 @@ const root = path.resolve(__dirname, '../..');
       const canvas=document.createElement('canvas');canvas.width=canvas.height=512;
       const context=canvas.getContext('2d');context.drawImage(image,0,0);
       const pixels=context.getImageData(0,0,512,512).data;
+      const isWhite=i=>pixels[i*4]>240&&pixels[i*4+1]>240&&pixels[i*4+2]>240;
+      // White connected to the canvas edge is background; isolated white inside the hole is artwork.
+      const background=new Uint8Array(512*512),queue=[0];background[0]=1;
+      for(let head=0;head<queue.length;head++){
+        const i=queue[head],x=i%512,y=Math.floor(i/512);
+        const neighbors=[];
+        if(x>0)neighbors.push(i-1);if(x<511)neighbors.push(i+1);
+        if(y>0)neighbors.push(i-512);if(y<511)neighbors.push(i+512);
+        for(const next of neighbors)if(!background[next]&&isWhite(next)){
+          background[next]=1;queue.push(next);
+        }
+      }
+      let whiteBarPixels=0;
       for(let y=0;y<512;y++)for(let x=0;x<512;x++){
         const i=(y*512+x)*4;
         if(pixels[i+3]!==255)return false;
-        const whiteBar=pixels[i]>240&&pixels[i+1]>240&&pixels[i+2]>240;
+        const whiteBar=isWhite(y*512+x)&&!background[y*512+x];
+        if(whiteBar)whiteBarPixels++;
         const darkHole=pixels[i]===20&&pixels[i+1]===30&&pixels[i+2]===36;
-        // The green and red panel edges may extend beyond the safe circle.
         if((whiteBar||darkHole)&&Math.hypot(x+.5-256,y+.5-256)>204.8)return false;
       }
-      const edges=[[0,0],[511,0],[0,511],[511,511],[256,0],[256,511],[0,256],[511,256]];
-      for(const [x,y] of edges){
+      // Check the white tile edges and the original gap between the top panel and centre hole.
+      const whiteSamples=[[0,0],[511,0],[0,511],[511,511],[256,0],[256,511],[0,256],[511,256],[256,183]];
+      for(const [x,y] of whiteSamples){
         const i=(y*512+x)*4;
-        if(pixels[i]===31&&pixels[i+1]===41&&pixels[i+2]===55)return false;
+        if(pixels[i]!==255||pixels[i+1]!==255||pixels[i+2]!==255)return false;
       }
-      // The middle white bar covers the centre (256, 252.32); sample the exposed hole above it.
-      const holePixel=(200*512+256)*4;
-      return pixels[holePixel]===20&&pixels[holePixel+1]===30&&pixels[holePixel+2]===36;
+      // The middle white bar covers the centre (256, 253.6); sample the exposed hole above it.
+      const holePixel=(214*512+256)*4;
+      return whiteBarPixels>0&&pixels[holePixel]===20&&pixels[holePixel+1]===30&&pixels[holePixel+2]===36;
     });
-    if(!maskable)throw new Error('Maskable icon has transparency, old dark padding at its edges, a missing dark hole, or important content outside its safe circle');
+    if(!maskable)throw new Error('Maskable icon has transparency, missing white background or artwork gaps, missing activity bars or dark hole, or important content outside its safe circle');
     console.log('Maskable icon opacity and safe zone: passed');
     // Actual navigator offline/online events, with real browser timers.
     await page.goto('http://localhost:5011/fixture/?native=true');
