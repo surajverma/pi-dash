@@ -31,23 +31,27 @@ test('rankings safely display full names and graph gaps are not drawn as continu
   dom.window.close();
 });
 
-test('ranking uncertainty is subtle and missing-source warnings remain distinct', () => {
+test('ranking counts stay plain and uncertainty and missing-source warnings remain distinct', () => {
   const dom = new JSDOM('<ol></ol><p></p>'), d = dom.window.document;
   const data = {contributors:2, instances:2, partial:false, limited:false,
-    items:[{id:'example.test', label:'example.test', count:120, share:10, approximate:true}]};
+    items:[{id:'example.test', label:'example.test', count:120, share:10}]};
   const render = () => insights.renderRanking(d.querySelector('ol'), d.querySelector('p'), data, 'Domains');
   render();
-  assert.equal(d.querySelector('.rank-count').textContent, '≥120');
-  assert.match(d.querySelector('button').title, /Count may be higher/);
-  assert.match(d.querySelector('button').getAttribute('aria-label'), /at least 120/);
+  const assertPlainCount = () => {
+    assert.equal(d.querySelector('.rank-count').textContent, '120');
+    assert.equal(d.querySelector('button').title, 'example.test');
+    assert.equal(d.querySelector('button').getAttribute('aria-label'), 'example.test: 120 queries, 10.0 percent. Expand name');
+  };
+  assertPlainCount();
   assert.equal(d.querySelector('p').textContent, '');
   data.limited = true; render();
+  assertPlainCount();
   assert.equal(d.querySelector('p').textContent, 'Approximate ranking · counts near the cut-off');
   data.partial = true; data.contributors = 1; render();
+  assertPlainCount();
   assert.equal(d.querySelector('p').textContent, 'Partial data · 1 of 2 reporting');
-  data.partial = false; data.limited = false; data.items[0].approximate = false; render();
-  assert.equal(d.querySelector('.rank-count').textContent, '120');
-  assert.doesNotMatch(d.querySelector('button').title, /Count may be higher/);
+  data.partial = false; data.limited = false; render();
+  assertPlainCount();
   dom.window.close();
 });
 

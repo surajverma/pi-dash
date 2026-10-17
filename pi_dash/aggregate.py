@@ -95,7 +95,6 @@ def combine_rankings(snapshots, kind, instance_count):
     limited = contributors > 1 and cutoff < outside
     for row in ranked:
         row['share'] = min(100, row['count'] / total * 100) if total else 0
-        row['approximate'] = upper(row) > row['count']
     return {'items': ranked, 'contributors': contributors, 'instances': instance_count,
             'partial': contributors < instance_count, 'limited': limited}
 

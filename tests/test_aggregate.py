@@ -61,7 +61,7 @@ class AggregateTests(unittest.TestCase):
         result = combine_rankings({'One': self.ranking_source([(f'top-{i}', 100-i) for i in range(5)], 1)}, 'domains', 1)
         self.assertFalse(result['limited'])
         self.assertFalse(result['partial'])
-        self.assertTrue(all(not row['approximate'] for row in result['items']))
+        self.assertTrue(all('approximate' not in row for row in result['items']))
 
     def test_two_truncated_sources_with_clear_top_five_are_exact(self):
         top = [(f'top-{i}', 1000-i*100) for i in range(5)]
@@ -83,15 +83,14 @@ class AggregateTests(unittest.TestCase):
         self.assertTrue(result['partial'])
         self.assertFalse(result['limited'])
 
-    def test_mixed_sources_mark_understated_counts_without_uncertain_top_five(self):
+    def test_mixed_sources_preserve_plain_counts_without_uncertain_top_five(self):
         top = [(f'top-{i}', 1000-i*100) for i in range(4)]
         result = combine_rankings({'One': self.ranking_source(top, 1),
                                    'Two': self.ranking_source(top + [('only-two', 200)])}, 'domains', 2)
         self.assertFalse(result['limited'])
         self.assertFalse(result['partial'])
-        self.assertTrue(result['items'][4]['approximate'])
         self.assertEqual(result['items'][4]['count'], 200)
-        self.assertTrue(all(not row['approximate'] for row in result['items'][:4]))
+        self.assertTrue(all('approximate' not in row for row in result['items']))
 
     def test_never_seen_candidate_bound_and_equal_cutoff(self):
         top = [(f'top-{i}', 10) for i in range(5)]
