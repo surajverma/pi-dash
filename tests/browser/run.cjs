@@ -74,12 +74,12 @@ const root = path.resolve(__dirname, '../..');
         if((whiteBar||darkHole)&&Math.hypot(x+.5-256,y+.5-256)>204.8)return false;
       }
       // Check the white tile edges and the original gap between the top panel and centre hole.
-      const whiteSamples=[[0,0],[511,0],[0,511],[511,511],[256,0],[256,511],[0,256],[511,256],[256,183]];
+      const whiteSamples=[[0,0],[511,0],[0,511],[511,511],[256,0],[256,511],[0,256],[511,256],[256,178]];
       for(const [x,y] of whiteSamples){
         const i=(y*512+x)*4;
         if(pixels[i]!==255||pixels[i+1]!==255||pixels[i+2]!==255)return false;
       }
-      // The middle white bar covers the centre (256, 253.6); sample the exposed hole above it.
+      // The middle white bar covers the centre (256, 253.44); sample the exposed hole above it.
       const holePixel=(214*512+256)*4;
       return whiteBarPixels>0&&pixels[holePixel]===20&&pixels[holePixel+1]===30&&pixels[holePixel+2]===36;
     });
