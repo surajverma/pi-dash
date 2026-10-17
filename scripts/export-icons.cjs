@@ -18,7 +18,8 @@ const root = path.resolve(__dirname, '../web');
       await page.setContent('<style>html,body{margin:0;background:transparent}svg{display:block;width:100%;height:100%}</style>'+svg);
       await page.screenshot({path:path.join(root,'icons',size===180?'apple-touch-icon.png':`icon-${size}.png`),omitBackground:true});
     }
-    const maskable = source.replace(/<svg[^>]*>/, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#1f2937"/><g transform="translate(35.84 35.84) scale(.86)">').replace('</svg>', '</g></svg>');
+    // Keep the original silhouette and gaps visible inside launcher masks.
+    const maskable = source.replace(/<svg[^>]*>/, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#fff"/><g transform="translate(92.16 92.16) scale(.64)">').replace('</svg>', '</g></svg>');
     fs.writeFileSync(path.join(root,'icons/icon-maskable.svg'),maskable);
     await page.setViewportSize({width:512,height:512});
     await page.setContent('<style>html,body{margin:0}svg{display:block;width:100%;height:100%}</style>'+maskable);
