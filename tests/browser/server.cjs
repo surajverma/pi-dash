@@ -17,10 +17,10 @@ http.createServer((req, res) => {
   const relative = pathname === '/' ? '/tests/browser/index.html' : pathname.endsWith('/') ? pathname + 'index.html' : pathname;
   const file = path.resolve(root, '.' + relative);
   // Only public assets and this synthetic test harness may be served.
-  if (!file.startsWith(root + path.sep) || !/^\/(css|js|tests\/browser)\//.test(relative)) { res.writeHead(404); res.end(); return; }
+  if (!file.startsWith(root + path.sep) || !/^\/(css|js|icons|tests\/browser)\//.test(relative)) { res.writeHead(404); res.end(); return; }
   fs.readFile(file, (error, data) => {
     if (error) { res.writeHead(404); res.end(); return; }
-    res.setHeader('Content-Type', { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(file)] || 'text/plain');
+    res.setHeader('Content-Type', { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' }[path.extname(file)] || 'text/plain');
     res.end(data);
   });
 }).listen(port, '127.0.0.1', () => console.log(`Rendered regression suite: http://localhost:${port}/tests/browser/`));

@@ -39,7 +39,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('[data-device="cpu_percent"]').first().filter({hasText:'7.2%'}).waitFor();
     if (await page.locator('#network-insights').isVisible() || await page.locator('#insights-toggle').isVisible()) throw new Error('Insights opt-out is visible');
     const compactWidth = await page.locator('#main-wrapper').evaluate(el=>el.getBoundingClientRect().width);
-    if (Math.abs(compactWidth-576)>1) throw new Error('Insights opt-out did not restore the original 576px desktop width');
+    if (Math.abs(compactWidth-768)>1) throw new Error('Insights opt-out did not restore the compact 768px desktop width');
     const defaults = await page.evaluate(async () => {
       await window.fixture.tick(30000);
       return {insightCalls:window.fixture.calls.filter(c=>c.type==='insights').length, centered:[...document.querySelectorAll('.device-group .metric-row')].every(row=>{const style=getComputedStyle(row);return style.justifyContent==='center' && (style.flexDirection!=='column' || style.alignItems==='center');})};
@@ -47,6 +47,21 @@ const root = path.resolve(__dirname, '../..');
     if (defaults.insightCalls || !defaults.centered) throw new Error('Disabled insights poll or hardware alignment is wrong');
     await page.screenshot({path:path.join(root,'test-results/default-insights-off.png'),fullPage:true});
     console.log('Insights opt-out and centered hardware: passed');
+    const maskable = await page.evaluate(async () => {
+      const image = new Image(); image.src='/icons/icon-maskable-512.png'; await image.decode();
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=512;
+      const context=canvas.getContext('2d');context.drawImage(image,0,0);
+      const pixels=context.getImageData(0,0,512,512).data;
+      for(let y=0;y<512;y++)for(let x=0;x<512;x++){
+        const i=(y*512+x)*4;
+        if(pixels[i+3]!==255)return false;
+        const artwork=pixels[i]!==31||pixels[i+1]!==41||pixels[i+2]!==55;
+        if(artwork&&Math.hypot(x+.5-256,y+.5-256)>204.8)return false;
+      }
+      return true;
+    });
+    if(!maskable)throw new Error('Maskable icon has transparency or artwork outside its safe circle');
+    console.log('Maskable icon opacity and safe circle: passed');
     // Actual navigator offline/online events, with real browser timers.
     await page.goto('http://localhost:5011/fixture/?native=true');
     await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":4'));

@@ -2,7 +2,7 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
 html { min-height: 100%; }
 /* Auto margins center short dashboards but become zero when content needs scrolling. */
 body { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; padding: 1rem; }
-#main-wrapper { flex: none; max-width: 36rem; margin-block: auto; }
+#main-wrapper { flex: none; max-width: 48rem; margin-block: auto; }
 #main-wrapper.has-network-insights { max-width: 56rem; }
 html, body { overscroll-behavior-y: contain; }
 [hidden] { display: none !important; }
@@ -163,7 +163,6 @@ html, body { overscroll-behavior-y: contain; }
 @media (prefers-reduced-motion: reduce) { body { transition: none; } .status-dot.is-live { animation: none; } }
 
 @media (min-width: 768px) and (min-height: 501px) {
-    #main-wrapper:not(.has-network-insights) .device-group .metric-row { flex-direction: column; align-items: center; gap: 0; }
     #main-wrapper > header { margin-bottom: .625rem; }
     #network-summary { margin-bottom: .625rem; padding: .75rem; }
     .instance-card { padding: .75rem; }

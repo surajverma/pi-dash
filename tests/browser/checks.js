@@ -15,7 +15,7 @@ function geometry(d, stage) {
   const panel = bounds(panelElement);
   const ambient = d.defaultView.getComputedStyle(panelElement).position === 'fixed';
   if (ambient) {
-    const maximum = d.querySelector('#main-wrapper').classList.contains('has-network-insights') ? 896 : 576;
+    const maximum = d.querySelector('#main-wrapper').classList.contains('has-network-insights') ? 896 : 768;
     assert(Math.abs(bounds(d.querySelector('#main-wrapper')).width - Math.min(maximum, width - 32)) < 1, `${stage}: desktop width does not match insights setting`);
     assert(Math.abs(panel.left) < 1 && Math.abs(panel.width - width) < 1, `${stage}: background feed is not viewport-wide`);
     assert(!shown(d.querySelector('.query-panel-header')), `${stage}: desktop feed became a foreground panel`);

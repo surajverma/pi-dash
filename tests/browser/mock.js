@@ -56,7 +56,7 @@
     }
   }, 50));
   window.fixture = {
-    timers, calls, data, queries, summary,
+    timers, calls, data, queries, summary, insights, devices,
     hide(value) { hidden = value; document.dispatchEvent(new Event('visibilitychange')); },
     online(value) { online = value; window.dispatchEvent(new Event(value ? 'online' : 'offline')); },
     defer(type) { const request = {}; deferred.set(type, request); return request; },

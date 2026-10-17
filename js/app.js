@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let appConfig = null;
   let statsTimer = null, queriesTimer = null, stalenessTimer = null, optionalTimer = null;
   let statsController = null, queriesController = null, initController = null;
+  const optionalRetries = new Map();
   const optionalControllers = new Map(), optionalUpdated = new Map();
   const compactViewport = window.matchMedia?.('(max-width: 767px), (max-width: 1024px) and (max-height: 500px)');
   let lastUpdateTime = null, manualPause = false, hoverPause = false;
@@ -185,7 +186,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const meta = raw?._pi_dash || {};
     const failed = !raw || !!raw.error || !raw.queries;
     const status = core.healthPresentation(meta, failed);
+    const recovered = section.dataset.healthState === 'danger' && !failed;
     section.dataset.healthState = status.state;
+    if (recovered) { optionalUpdated.delete('devices'); refreshOptional(); }
     section.querySelector('.status-dot').className = `status-dot status-${status.state}`;
     const health = section.querySelector('.pihole-health');
     health.className = `pihole-health status-text-${status.state}`;
@@ -332,7 +335,14 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const payload = await fetchData(kind, controller.signal);
       if (!canApply(generation, controller.signal)) return;
-      optionalUpdated.set(kind, Date.now());
+      if (payload.refreshing) {
+        clearTimeout(optionalRetries.get(kind));
+        optionalRetries.set(kind, setTimeout(() => { optionalRetries.delete(kind); refreshOptional(); }, 2000));
+        if (!payload.updated_at) return;
+      } else {
+        clearTimeout(optionalRetries.get(kind)); optionalRetries.delete(kind);
+        optionalUpdated.set(kind, Date.now());
+      }
       if (kind === 'devices') {
         for (const [name, section] of cards) {
           if (section.dataset.healthState === 'danger') continue;
@@ -341,12 +351,13 @@ document.addEventListener('DOMContentLoaded', () => {
           section.querySelectorAll('[data-device]').forEach(node => { node.textContent = values[node.dataset.device]; });
           const note = section.querySelector('.device-note');
           const age = typeof payload.updated_at === 'number' ? insights.age(payload.updated_at) : '';
-          if (note) note.textContent = data.unavailable?.length ? 'Some readings are unavailable' : age && age !== 'Just now' ? `Readings: ${age}` : '';
+          if (note) note.textContent = payload.refreshing ? 'Refreshing · showing previous readings' : data.unavailable?.length ? 'Some readings are unavailable' : age && age !== 'Just now' ? `Readings: ${age}` : '';
         }
       } else if (!payload.disabled) {
         insights.renderHistory(document.getElementById('network-history'), document.getElementById('history-status'), payload.history);
         insights.renderRanking(document.getElementById('network-clients'), document.getElementById('clients-status'), payload.clients, 'Clients');
         insights.renderRanking(document.getElementById('network-domains'), document.getElementById('domains-status'), payload.domains, 'Blocked domains');
+        if (payload.refreshing) document.getElementById('history-status').textContent = 'Refreshing · showing previous data';
       }
     } catch (error) {
       if (!canApply(generation, controller.signal) || error.name === 'AbortError') return;
@@ -375,6 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
     statsTimer = queriesTimer = stalenessTimer = null;
     initController?.abort(); statsController?.abort(); queriesController?.abort();
     initController = statsController = queriesController = null;
+    optionalRetries.forEach(timer => clearTimeout(timer)); optionalRetries.clear();
     optionalControllers.forEach(controller => controller.abort()); optionalControllers.clear();
     updateStaleness();
   }

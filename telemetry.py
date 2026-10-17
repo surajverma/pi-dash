@@ -2,7 +2,7 @@
 import ipaddress
 import math
 
-RANK_LIMIT = 1000
+RANK_LIMIT = 100
 HISTORY_BUCKET = 600
 
 
@@ -16,11 +16,15 @@ def number(value, minimum=0):
         return None
 
 
+def mapping(value):
+    return value if isinstance(value, dict) else {}
+
+
 def device_view(parts):
-    system = parts.get('system', {}).get('system') or {}
-    cpu = system.get('cpu') or {}
-    ram = (system.get('memory') or {}).get('ram') or {}
-    sensors = parts.get('sensors', {}).get('sensors') or {}
+    system = mapping(mapping(parts.get('system')).get('system'))
+    cpu = mapping(system.get('cpu'))
+    ram = mapping(mapping(system.get('memory')).get('ram'))
+    sensors = mapping(mapping(parts.get('sensors')).get('sensors'))
     # Pi-hole reports summed CPU use across cores; show a device-wide 0-100%.
     usage, cores = number(cpu.get('%cpu')), number(cpu.get('nprocs'), 1)
     cpu_percent = min(100, usage / cores) if usage is not None and cores else None
@@ -60,9 +64,11 @@ def combine_rankings(snapshots, kind, instance_count):
         if not isinstance(rows, list):
             continue
         contributors += 1
-        total += data[denominator]
+        total += number(data[denominator])
         limited |= len(rows) >= RANK_LIMIT
         for row in rows:
+            if not isinstance(row, dict):
+                continue
             identity = _identity(row.get('ip') if kind == 'clients' else row.get('domain'))
             count = number(row.get('count'), 1)
             if not identity or count is None:
@@ -83,12 +89,14 @@ def combine_history(snapshots, instance_count):
     buckets = {}
     contributors = 0
     for parts in snapshots.values():
-        data = parts.get('history', {}).get('history')
+        data = mapping(parts.get('history')).get('history')
         if not isinstance(data, list):
             continue
         contributors += 1
         local = {}
         for row in data:
+            if not isinstance(row, dict):
+                continue
             stamp, total, blocked = (number(row.get(key)) for key in ('timestamp', 'total', 'blocked'))
             if stamp is None or total is None or blocked is None:
                 continue

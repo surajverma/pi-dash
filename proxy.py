@@ -287,6 +287,13 @@ def fetch_one(pihole):
     name = pihole['name']
     try:
         data = pihole_get(pihole, '/api/stats/summary').json()
+        previous = (_stats_cache.get('data') or {}).get(name, {})
+        if previous.get('error'):
+            # A real DNS recovery expires failed optional readings immediately.
+            for kind in ('devices', 'insights'):
+                cached = _optional_cache.get(kind)
+                if cached:
+                    _optional_cache[kind] = dict(cached, time=0)
         blocking = get_blocking(pihole)
         data['_pi_dash'] = {
             'blocking': blocking,
@@ -426,46 +433,76 @@ def network_summary(data):
     }
 
 
-def fetch_optional(kind):
-    """Refresh slow optional data separately; never block /init or /data on it."""
-    with _optional_locks[kind]:
-        cached = _optional_cache.get(kind)
-        if cached and time.monotonic() - cached['time'] < OPTIONAL_REFRESH_MS / 1000:
-            return cached['data']
-        items = enabled()
-        parts = {p['name']: {} for p in items}
-        paths = (
-            [('system', '/api/info/system', None), ('sensors', '/api/info/sensors', None)] if kind == 'devices' else
-            [('history', '/api/history', None),
-             ('clients', '/api/stats/top_clients', {'count': RANK_LIMIT}),
-             ('domains', '/api/stats/top_domains', {'count': RANK_LIMIT, 'blocked': 'true'})]
-        )
+def _refresh_optional(kind):
+    """Fetch one optional snapshot on behalf of the refresh owner."""
+    items = enabled()
+    parts = {p['name']: {} for p in items}
+    paths = (
+        [('system', '/api/info/system', None), ('sensors', '/api/info/sensors', None)] if kind == 'devices' else
+        [('history', '/api/history', None),
+         ('clients', '/api/stats/top_clients', {'count': RANK_LIMIT}),
+         ('domains', '/api/stats/top_domains', {'count': RANK_LIMIT, 'blocked': 'true'})]
+    )
 
-        def read_part(pihole, key, path, params):
-            try:
-                data = pihole_get(pihole, path, params=params, timeout=4).json()
-                if isinstance(data, dict) and 'error' not in data:
-                    return pihole['name'], key, data
-            except (requests.exceptions.RequestException, RuntimeError, ValueError):
-                pass
-            return pihole['name'], key, None
+    def read_part(pihole, key, path, params):
+        try:
+            data = pihole_get(pihole, path, params=params, timeout=4).json()
+            expected = list if key in ('history', 'clients', 'domains') else dict
+            if isinstance(data, dict) and 'error' not in data and isinstance(data.get(key), expected):
+                return pihole['name'], key, data
+        except (requests.exceptions.RequestException, RuntimeError, ValueError):
+            pass
+        return pihole['name'], key, None
 
-        if items:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(items) * len(paths))) as pool:
-                futures = [pool.submit(read_part, p, *path) for p in items for path in paths]
-                for future in concurrent.futures.as_completed(futures):
-                    name, key, data = future.result()
-                    if data is not None:
-                        parts[name][key] = data
+    if items:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(items) * len(paths))) as pool:
+            futures = [pool.submit(read_part, p, *path) for p in items for path in paths]
+            for future in concurrent.futures.as_completed(futures):
+                name, key, data = future.result()
+                if data is not None:
+                    parts[name][key] = data
+    try:
         if kind == 'devices':
             result = {'devices': {name: device_view(data) for name, data in parts.items()}}
         else:
             result = {'history': combine_history(parts, len(items)),
                       'clients': combine_rankings(parts, 'clients', len(items)),
                       'domains': combine_rankings(parts, 'domains', len(items))}
-        result['updated_at'] = time.time()
-        _optional_cache[kind] = {'time': time.monotonic(), 'data': result}
-        return result
+    except (TypeError, ValueError, AttributeError, KeyError, OverflowError):
+        app.logger.warning('Malformed optional Pi-hole readings: %s', kind)
+        result = _empty_optional(kind)
+    result['updated_at'] = time.time()
+    _optional_cache[kind] = {'time': time.monotonic(), 'data': result}
+    return result
+
+
+def _empty_optional(kind):
+    if kind == 'devices':
+        return {'devices': {p['name']: device_view({}) for p in enabled()}}
+    count = len(enabled())
+    return {'history': combine_history({}, count),
+            'clients': combine_rankings({}, 'clients', count),
+            'domains': combine_rankings({}, 'domains', count)}
+
+
+def fetch_optional(kind):
+    """Only the refresh owner waits on upstream IO; other HTTP threads return."""
+    cached = _optional_cache.get(kind)
+    if cached and time.monotonic() - cached['time'] < OPTIONAL_REFRESH_MS / 1000:
+        return cached['data']
+    lock = _optional_locks[kind]
+    if not lock.acquire(blocking=False):
+        cached = _optional_cache.get(kind)
+        return dict(cached['data'] if cached else _empty_optional(kind),
+                    refreshing=True, stale=bool(cached),
+                    updated_at=cached['data'].get('updated_at') if cached else None)
+    try:
+        cached = _optional_cache.get(kind)
+        if cached and time.monotonic() - cached['time'] < OPTIONAL_REFRESH_MS / 1000:
+            return cached['data']
+        return _refresh_optional(kind)
+    finally:
+        lock.release()
 
 
 @bp.route('/devices')

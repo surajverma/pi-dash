@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-dashboard-cache-v9-optional-wide-layout';
+const CACHE_NAME = 'pi-dashboard-cache-v10-optional-refresh';
 const APP_SHELL = [
   '{{CACHE_URL}}',
   '{{CACHE_URL}}css/style.css',
@@ -7,6 +7,7 @@ const APP_SHELL = [
   '{{CACHE_URL}}js/theme.js',
   '{{CACHE_URL}}js/insights.js',
   '{{CACHE_URL}}js/app.js',
+  '{{CACHE_URL}}icons/icon-maskable-512.png',
   '{{CACHE_URL}}icons/icon.svg',
   '{{CACHE_URL}}icons/favicon.svg',
   '{{CACHE_URL}}icons/icon-192.png',

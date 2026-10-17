@@ -119,9 +119,9 @@ class OptionalRouteTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as pool:
                 results = list(pool.map(lambda _: proxy.fetch_optional('devices'), range(2)))
             self.assertEqual(fetch.call_count, 2)
-            self.assertEqual(results[0], results[1])
-            self.assertEqual(results[0]['devices']['One']['uptime_seconds'], 100)
-            self.assertEqual(results[0]['devices']['One']['unavailable'], ['sensors'])
+            fresh = next(result for result in results if not result.get('refreshing'))
+            self.assertEqual(fresh['devices']['One']['uptime_seconds'], 100)
+            self.assertEqual(fresh['devices']['One']['unavailable'], ['sensors'])
             self.assertNotIn('secret', json.dumps(results[0]))
 
     def test_init_does_not_wait_for_optional_metrics(self):

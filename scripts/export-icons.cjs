@@ -18,6 +18,11 @@ const root = path.resolve(__dirname, '..');
       await page.setContent('<style>html,body{margin:0;background:transparent}svg{display:block;width:100%;height:100%}</style>'+svg);
       await page.screenshot({path:path.join(root,'icons',size===180?'apple-touch-icon.png':`icon-${size}.png`),omitBackground:true});
     }
+    const maskable = source.replace(/<svg[^>]*>/, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#1f2937"/><g transform="translate(82 82) scale(.68)">').replace('</svg>', '</g></svg>');
+    fs.writeFileSync(path.join(root,'icons/icon-maskable.svg'),maskable);
+    await page.setViewportSize({width:512,height:512});
+    await page.setContent('<style>html,body{margin:0}svg{display:block;width:100%;height:100%}</style>'+maskable);
+    await page.screenshot({path:path.join(root,'icons/icon-maskable-512.png')});
     const images = [16,32].map(size=>({size,data:fs.readFileSync(path.join(root,`icons/icon-${size}.png`))}));
     const header=Buffer.alloc(6+16*images.length); header.writeUInt16LE(1,2); header.writeUInt16LE(images.length,4);
     let offset=header.length;

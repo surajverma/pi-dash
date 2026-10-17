@@ -30,7 +30,7 @@ All screenshots use fictional sample data and the current dashboard. The optiona
 
 ### Desktop: default view (light mode)
 
-Network insights are off; device metrics are on. The dashboard keeps its original 576px maximum width. Captured at 1366×768.
+Network insights are off; device metrics are on. The dashboard keeps its compact 768px maximum width. Captured at 1366×768.
 
 ![Desktop default view with network totals and centered hardware readings](docs/screenshots/desktop-default-light.png)
 
@@ -83,7 +83,7 @@ The example includes the two new flags:
 - `show_network_insights: false` keeps the graph and both rankings hidden and skips their API requests. Change it to `true` to enable them.
 - `show_device_metrics: true` enables CPU, RAM, temperature, and uptime in each instance's details. Set it to `false` to hide them and stop their API requests.
 
-These defaults also apply when the flags are omitted from older configurations. The existing `show_network_summary` flag still defaults to `true` and controls the original summary counters.
+These defaults also apply when the flags are omitted from older configurations. See the [upgrade notes](CHANGELOG.md#unreleased) for the polling change. The existing `show_network_summary` flag still defaults to `true` and controls the original summary counters.
 
 #### Dashboard options
 
@@ -139,9 +139,9 @@ Desktop keeps all instance details open, with DNS activity and device health gro
 
 Network Insights uses Pi-hole's rolling in-memory reporting window (normally about 24 hours; retention and privacy settings can affect it). History is aligned into ten-minute buckets, with at most the latest 24 hours drawn. Missing buckets are not filled with invented zeros. Rankings combine matching client addresses or normalized domains before selecting the top five. Client names are labels, so unrelated devices with the same name are not merged. Tap/click a ranking row to reveal its full name and address. Counts are observed DNS requests, not deduplicated user activity; chained Pi-holes can observe the same request more than once.
 
-Up to 1,000 source entries per ranking and Pi-hole are combined. If this limit is reached, the ranking is explicitly marked partial. Pi-hole's own excluded-client/domain and privacy settings remain respected. Shares use the corresponding total queries or blocked queries, so the five visible rows need not add up to 100%. Missing instances and unavailable sections are labelled independently.
+Up to 100 source entries per ranking and Pi-hole are combined. If this limit is reached, the ranking is explicitly marked partial. Pi-hole's own excluded-client/domain and privacy settings remain respected. Shares use the corresponding total queries or blocked queries, so the five visible rows need not add up to 100%. Missing instances and unavailable sections are labelled independently.
 
-Device metrics and network insights load independently of the fast DNS counters, refresh at most every 30 seconds per browser, and share a separate 30-second server cache. Mobile requests them only while the relevant section is expanded. All polling pauses while the page is hidden or offline. An unavailable sensor or unsupported API does not mark a working DNS server offline; its reading displays Unavailable. Healthy status dots pulse gently only while the latest DNS snapshot is fresh, and respect reduced-motion preferences.
+Device metrics and network insights load independently of the fast DNS counters, normally refresh every 30 seconds per browser, and share a separate 30-second server cache. Waiting tabs retry a refresh-in-progress response after two seconds. Mobile requests optional data only while the relevant section is expanded. All polling pauses while the page is hidden or offline. An unavailable sensor or unsupported API does not mark a working DNS server offline; its reading displays Unavailable. Healthy status dots pulse gently only while the latest DNS snapshot is fresh, and respect reduced-motion preferences.
 
 CPU is Pi-hole's reported total CPU use divided by the number of processors, displayed on a device-wide 0–100% scale. RAM and system uptime are the system readings, not the FTL process figures. Container installations report the system visible to Pi-hole and may not expose temperature sensors. Lists updated uses Pi-hole's gravity timestamp. Cached / Forwarded remains the raw pair of counters (Pi-hole's cached count can include locally configured answers).
 
@@ -161,7 +161,7 @@ This optional file customizes the Progressive Web App name and colors. Pi-Dash b
   "start_url": "/",
   "display": "standalone",
   "background_color": "#111827",
-  "theme_color": "#06b6d4",
+  "theme_color": "#1f2937",
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -174,12 +174,18 @@ This optional file customizes the Progressive Web App name and colors. Pi-Dash b
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
 ```
 
-No Pi-hole hostname or port is needed for these icons. Manifest start URL, scope, and app identity follow `base_path`, including subpath installations. Apple touch and 16/32-pixel favicon assets are also bundled. The normal app icons are transparent and declare `purpose: any`; they are not labelled maskable.
+No Pi-hole hostname or port is needed for these icons. Manifest start URL, scope, and app identity follow `base_path`, including subpath installations. Apple touch and 16/32-pixel favicon assets are also bundled. The normal app icons are transparent and declare `purpose: any`; a separate opaque icon declares `purpose: maskable` for Android.
 
 PWA installation requires HTTPS (or localhost), and browser/platform installation behavior varies. If you mount a custom `manifest.json` from an older installation, update its icons to the local entries above or remove the mount to use the bundled manifest. A mounted old manifest continues to override the packaged defaults. The service worker refreshes the app shell and never caches the DNS, ranking, or hardware API responses.
 
@@ -292,3 +298,7 @@ The compact desktop view uses header client counts, text-only rankings, and a si
 Network insights are off when `show_network_insights` is omitted, including existing configurations. Device metrics remain on when `show_device_metrics` is omitted. Set either flag explicitly to change that behavior. `show_network_summary` still defaults to true and controls the original four summary counters; disabling it also disables insights and their API requests. Unique Domains is no longer displayed; Domains on Lists is retained.
 
 The V2 vector master is `icons/icon.svg`; `icons/favicon.svg` uses wider, square bars for small sizes. The SVG sources have no embedded raster artwork or blur filters; PNG and ICO exports retain transparent backgrounds. To regenerate them, run `npm ci`, `npx playwright install chromium`, and `npm run build:icons`. The 16px export uses pixel-aligned bars for legibility.
+
+Optional refreshes use a nonblocking refresh lock: waiting tabs receive the previous snapshot or a loading response and retry after two seconds, rather than occupying web threads. Failed or malformed optional readings are cached for 30 seconds. A detected DNS recovery expires the old readings. The existing four Gunicorn threads are retained.
+
+The 512px maskable icon uses an opaque dark background and keeps the mark inside the central safe circle; the regular PNG icons remain transparent. The manifest theme color matches the dark page background, and the page theme-color metadata follows the selected light/dark mode.
