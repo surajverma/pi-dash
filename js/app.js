@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ['blocked', 'Queries Blocked', 'text-red-500'],
     ['percentage', 'Percent Blocked', 'text-yellow-600 dark:text-yellow-500'],
     ['cache', 'Cached / Forwarded', 'text-indigo-500'],
-    ['unique', 'Unique Domains', 'text-orange-500'],
     ['domains', 'Domains on Lists', 'text-green-600 dark:text-green-500'],
   ];
   const cards = new Map();
@@ -117,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     details.id = `instance-details-${index}`;
     const dns = element('div', 'metric-group');
     for (const [key, label, color] of metrics) {
-      if (key !== 'unique' || appConfig.show_unique_domains) addMetric(dns, key, label, color);
+      addMetric(dns, key, label, color);
     }
     const gravityAge = element('div', 'metric-row');
     gravityAge.append(element('span', 'metric-label', 'Lists updated'), element('span', 'metric-value gravity-age', 'Unavailable'));
@@ -197,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
       total: number(stats.total), blocked: number(stats.blocked),
       percentage: `${stats.percentage.toFixed(1)}%`,
       cache: `${number(stats.cached)} / ${number(stats.forwarded)}`,
-      unique: number(stats.unique), clients: number(stats.clients), domains: number(stats.domains),
+      domains: number(stats.domains),
     };
     section.querySelectorAll('[data-value]').forEach(node => {
       node.textContent = values[node.dataset.value] ?? (node.dataset.value === 'percentage' ? '--%' : '--');

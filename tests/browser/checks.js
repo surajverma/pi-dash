@@ -68,7 +68,7 @@ async function checkLayout(width, height, scenario, dark) {
     assert(shown(details) === !compact, 'wrong metric visibility');
     assert(details.querySelectorAll('[data-value]').length === 5, 'missing DNS metrics');
     assert(details.querySelectorAll('[data-device]').length === 4, 'missing optional readings');
-    assert(!details.textContent.includes('Unique Domains'), 'unique domains should be optional');
+    assert(!details.textContent.includes('Unique Domains'), 'unique domains must remain removed');
     assert(toggle.getAttribute('aria-label').includes('details for '), 'missing per-instance accessible name');
     if (compact) {
       toggle.click();

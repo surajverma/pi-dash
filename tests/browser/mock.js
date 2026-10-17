@@ -14,7 +14,7 @@
     data.Unknown._pi_dash.blocking = null;
   }
   const queries = count ? { [names[0]]: Array.from({ length: 36 }, (_, i) => ({ id: i + 1, time: i + 1, domain: i > 32 ? 'repeat.example.org' : `query-${i}.example.org`, blocked: i < 10 })) } : {};
-  const cfg = { refresh_interval: 2000, queries_refresh_interval: 3000, optional_refresh_interval: 30000, show_queries: true, show_network_summary: true, show_network_insights: true, show_device_metrics: true, show_trends: true, piholes: names.map(name => ({ name, link: false, enabled: true })) };
+  const cfg = { refresh_interval: 2000, queries_refresh_interval: 3000, optional_refresh_interval: 30000, show_queries: true, show_network_summary: true, show_network_insights: params.get('insights') !== 'false', show_device_metrics: true, show_trends: true, piholes: names.map(name => ({ name, link: false, enabled: true })) };
   const devices = Object.fromEntries(names.map(name => [name, {cpu_percent: 7.2, ram_percent: 38.1, temperature: 48.5, temperature_unit: 'C', uptime_seconds: 92345, upstream_ms: 15.2, unavailable: []}]));
   const latest = Math.floor(Date.now() / 600000) * 600;
   const rows = Array.from({length: 5}, (_, i) => ({id: `192.168.1.${i+1}`, label: scenario === 'long' ? `averylongunbrokenclienthostname-${i}.example.test` : ['MacBook','Living Room TV','Home Assistant','Phone','Router'][i], count: 5200 - i * 900, share: 28 - i * 4}));

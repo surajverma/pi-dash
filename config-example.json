@@ -6,9 +6,8 @@
   "show_queries": false,
   "show_network_summary": true,
   "show_trends": true,
-  "show_network_insights": true,
+  "show_network_insights": false,
   "show_device_metrics": true,
-  "show_unique_domains": false,
   "piholes": [
     {
       "name": "Primary",

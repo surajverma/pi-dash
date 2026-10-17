@@ -77,6 +77,36 @@ class OptionalRouteTests(unittest.TestCase):
                 self.assertEqual(client.get(path).headers['Cache-Control'], 'no-store')
             fetch.assert_not_called()
 
+    def test_missing_flags_preserve_simple_defaults(self):
+        cfg = proxy.filtered_config()
+        self.assertTrue(cfg['show_network_summary'])
+        self.assertFalse(cfg['show_network_insights'])
+        self.assertTrue(cfg['show_device_metrics'])
+        self.assertNotIn('show_unique_domains', cfg)
+        with proxy.app.test_client() as client, patch.object(proxy, 'fetch_optional', return_value={'devices': {}}) as fetch:
+            self.assertTrue(client.get('/insights').get_json()['disabled'])
+            fetch.assert_not_called()
+            self.assertEqual(client.get('/devices').status_code, 200)
+            fetch.assert_called_once_with('devices')
+        proxy.config.update(show_network_summary=False, show_network_insights=True)
+        with proxy.app.test_client() as client, patch.object(proxy, 'fetch_optional') as fetch:
+            self.assertTrue(client.get('/insights').get_json()['disabled'])
+            fetch.assert_not_called()
+
+    def test_vector_sources_and_transparent_png_export_sizes(self):
+        import pathlib
+        import struct
+        import xml.etree.ElementTree as ET
+        icons = pathlib.Path(proxy.APP_ROOT) / 'icons'
+        for name in ('icon.svg', 'favicon.svg'):
+            svg = ET.parse(icons / name).getroot()
+            self.assertEqual(svg.attrib['viewBox'], '0 0 512 512')
+            self.assertFalse(any(node.tag.endswith(('image', 'filter')) for node in svg.iter()))
+        for size in (16, 32, 180, 192, 512):
+            png = (icons / ('apple-touch-icon.png' if size == 180 else f'icon-{size}.png')).read_bytes()
+            self.assertEqual(struct.unpack('>II', png[16:24]), (size, size))
+            self.assertEqual(png[25], 6, 'PNG must retain RGBA transparency')
+
     def test_optional_failure_is_partial_and_cache_coalesces_requests(self):
         class Response:
             def json(self):

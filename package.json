@@ -8,6 +8,7 @@
     "tailwindcss": "^3.3.0"
   },
   "scripts": {
+    "build:icons": "node scripts/export-icons.cjs",
     "build:css": "tailwindcss -c tailwind.config.js -i ./src/tailwind.css -o ./css/style.css --minify",
     "test:js": "node --test tests/*.test.cjs",
     "dev": "node tests/browser/server.cjs",

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-dashboard-cache-v7-compact-dashboard';
+const CACHE_NAME = 'pi-dashboard-cache-v8-vector-icons-defaults';
 const APP_SHELL = [
   '{{CACHE_URL}}',
   '{{CACHE_URL}}css/style.css',
@@ -7,6 +7,8 @@ const APP_SHELL = [
   '{{CACHE_URL}}js/theme.js',
   '{{CACHE_URL}}js/insights.js',
   '{{CACHE_URL}}js/app.js',
+  '{{CACHE_URL}}icons/icon.svg',
+  '{{CACHE_URL}}icons/favicon.svg',
   '{{CACHE_URL}}icons/icon-192.png',
   '{{CACHE_URL}}icons/icon-512.png',
   '{{CACHE_URL}}icons/icon-32.png',

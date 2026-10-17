@@ -236,9 +236,8 @@ def filtered_config():
         'show_queries': config.get('show_queries', False),
         'show_network_summary': config.get('show_network_summary', True),
         'show_trends': config.get('show_trends', True),
-        'show_network_insights': config.get('show_network_insights', True),
+        'show_network_insights': config.get('show_network_insights', False),
         'show_device_metrics': config.get('show_device_metrics', True),
-        'show_unique_domains': config.get('show_unique_domains', False),
         'optional_refresh_interval': OPTIONAL_REFRESH_MS,
         'piholes': out,
     }
@@ -478,7 +477,7 @@ def devices():
 
 @bp.route('/insights')
 def insights():
-    if not config.get('show_network_summary', True) or not config.get('show_network_insights', True):
+    if not config.get('show_network_summary', True) or not config.get('show_network_insights', False):
         return jsonify({'disabled': True}), 200, {'Cache-Control': 'no-store'}
     return jsonify(fetch_optional('insights')), 200, {'Cache-Control': 'no-store'}
 

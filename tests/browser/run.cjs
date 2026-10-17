@@ -34,6 +34,17 @@ const root = path.resolve(__dirname, '../..');
       await page.screenshot({path:path.join(root,`test-results/compact-1366x${height}.png`),fullPage:true});
     }
     console.log('Laptop fit at 1366x768, 1366x680 and 1366x640: passed');
+    // Check the opt-out layout and centered hardware groups with real CSS.
+    await page.goto('http://localhost:5011/fixture/?insights=false');
+    await page.locator('[data-device="cpu_percent"]').first().filter({hasText:'7.2%'}).waitFor();
+    if (await page.locator('#network-insights').isVisible() || await page.locator('#insights-toggle').isVisible()) throw new Error('Insights opt-out is visible');
+    const defaults = await page.evaluate(async () => {
+      await window.fixture.tick(30000);
+      return {insightCalls:window.fixture.calls.filter(c=>c.type==='insights').length, centered:[...document.querySelectorAll('.device-group .metric-row')].every(row=>getComputedStyle(row).justifyContent==='center')};
+    });
+    if (defaults.insightCalls || !defaults.centered) throw new Error('Disabled insights poll or hardware alignment is wrong');
+    await page.screenshot({path:path.join(root,'test-results/default-insights-off.png'),fullPage:true});
+    console.log('Insights opt-out and centered hardware: passed');
     // Actual navigator offline/online events, with real browser timers.
     await page.goto('http://localhost:5011/fixture/?native=true');
     await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":4'));

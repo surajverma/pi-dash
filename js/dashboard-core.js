@@ -19,7 +19,7 @@
       total: finite(q.total), blocked: finite(q.blocked),
       percentage: finite(q.percent_blocked), clients: finite(clients.active),
       rate: finite(q.frequency), cached: finite(q.cached),
-      forwarded: finite(q.forwarded), unique: finite(q.unique_domains),
+      forwarded: finite(q.forwarded),
       domains: finite(gravity.domains_being_blocked),
     };
   }

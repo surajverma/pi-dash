@@ -48,8 +48,8 @@ html, body { overscroll-behavior-y: contain; }
 .dark .instance-clients { color: #9ca3af; }
 .device-group { border-top: 1px solid #e5e7eb; padding-top: .5rem; margin-top: .25rem; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .375rem .75rem; }
 .dark .device-group { border-color: #374151; }
-.device-group .metric-row { flex-wrap: wrap; justify-content: flex-start; gap: .25rem; }
-.device-group .metric-value { text-align: left; }
+.device-group .metric-row { flex-wrap: wrap; justify-content: center; gap: .25rem; text-align: center; }
+.device-group .metric-value { text-align: center; }
 .device-group .metric-label { font-size: .75rem; }
 .theme-toggle { position: fixed; top: max(.5rem, env(safe-area-inset-top)); right: max(.75rem, env(safe-area-inset-right)); z-index: 20; display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: .5rem; color: #6b7280; background: #f3f4f6; }
 .dark .theme-toggle { color: #9ca3af; background: #1f2937; }

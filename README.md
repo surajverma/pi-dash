@@ -14,7 +14,7 @@ Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole insta
 
 - **Multiple Pi-hole Support:** Monitor all your Pi-hole instances from a single dashboard.
 - **Network Summary:** View combined query, blocked, cached, and forwarded totals across reporting Pi-holes.
-- **Network Insights:** Desktop shows query history, top combined clients, and top blocked domains in three columns. Mobile loads these when you expand Network Insights.
+- **Network Insights:** Opt in to query history, top combined clients, and top blocked domains in three desktop columns. Mobile loads these when you expand Network Insights.
 - **Device Health:** CPU, RAM, temperature, system uptime, and blocklist update age, grouped separately from the DNS counters. Mobile keeps these inside Show details.
 - **Pi-hole Status:** See reachability, authentication errors, and blocking ON/OFF state for each instance.
 - **Responsive Design:** Desktop shows the full dashboard and ambient query feed. Mobile shows critical metrics in compact cards, with an accessible control to expand all available metrics.
@@ -50,9 +50,8 @@ Copy `config-example.json` to `config.json` and edit it for your network. The ex
   "show_queries": false,
   "show_network_summary": true,
   "show_trends": true,
-  "show_network_insights": true,
+  "show_network_insights": false,
   "show_device_metrics": true,
-  "show_unique_domains": false,
   "piholes": [
     {
       "name": "Primary",
@@ -77,9 +76,8 @@ Copy `config-example.json` to `config.json` and edit it for your network. The ex
 | `show_queries` | `false` | Show the live DNS query feed. Allowed queries are green and blocked queries are red. |
 | `show_network_summary` | `true` | Show combined statistics from all reporting Pi-holes. |
 | `show_trends` | `true` | Show short, in-memory query-rate sparklines. |
-| `show_network_insights` | `true` | Show combined history and top-five rankings inside Network Summary. Requires `show_network_summary`. |
+| `show_network_insights` | `false` | Show combined history and top-five rankings inside Network Summary. Requires `show_network_summary`. |
 | `show_device_metrics` | `true` | Show optional hardware readings in instance details. |
-| `show_unique_domains` | `false` | Include Unique Domains in instance details. Domains on Lists is always retained. |
 | `piholes` | `[]` | List of Pi-hole instances to monitor. |
 
 When `cache_ttl` is omitted, Pi-Dash calculates it as half of the shortest refresh interval, with a minimum of 100 ms and a maximum of 1000 ms. The values in `config-example.json` are recommended example settings; omitted options use the defaults above.
@@ -262,3 +260,7 @@ Contributions are welcome! If you have any ideas, suggestions, or bug reports, p
 If you like my work, you can [buy me a coffee ☕](https://ko-fi.com/skv)
 
 The compact desktop view uses header client counts, text-only rankings, and a single hardware strip without section captions. Lists updated remains below Domains on Lists. The normal two-instance layout is checked for no scrolling at 1366×768 and reduced content heights of 680 and 640 pixels. Longer names, extra instances, expanded ranking names, or larger accessibility text may require scrolling.
+
+Network insights are off when `show_network_insights` is omitted, including existing configurations. Device metrics remain on when `show_device_metrics` is omitted. Set either flag explicitly to change that behavior. `show_network_summary` still defaults to true and controls the original four summary counters; disabling it also disables insights and their API requests. Unique Domains is no longer displayed; Domains on Lists is retained.
+
+The V2 vector master is `icons/icon.svg`; `icons/favicon.svg` uses wider, square bars for small sizes. The SVG sources have no embedded raster artwork or blur filters; PNG and ICO exports retain transparent backgrounds. To regenerate them, run `npm ci`, `npx playwright install chromium`, and `npm run build:icons`. The 16px export uses pixel-aligned bars for legibility.
