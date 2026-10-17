@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pi-dashboard-cache-v13-larger-maskable-icon';
+const CACHE_NAME = 'pi-dashboard-cache-v14-full-bleed-maskable-icon';
 const APP_SHELL = [
   '{{CACHE_URL}}',
   '{{CACHE_URL}}css/style.css',

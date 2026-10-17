@@ -60,11 +60,16 @@ const root = path.resolve(__dirname, '../..');
         // The green and red panel edges may extend beyond the safe circle.
         if((whiteBar||darkHole)&&Math.hypot(x+.5-256,y+.5-256)>204.8)return false;
       }
-      // The middle white bar covers the centre (256, 252.56); sample the exposed hole above it.
-      const holePixel=(205*512+256)*4;
+      const edges=[[0,0],[511,0],[0,511],[511,511],[256,0],[256,511],[0,256],[511,256]];
+      for(const [x,y] of edges){
+        const i=(y*512+x)*4;
+        if(pixels[i]===31&&pixels[i+1]===41&&pixels[i+2]===55)return false;
+      }
+      // The middle white bar covers the centre (256, 252.32); sample the exposed hole above it.
+      const holePixel=(200*512+256)*4;
       return pixels[holePixel]===20&&pixels[holePixel+1]===30&&pixels[holePixel+2]===36;
     });
-    if(!maskable)throw new Error('Maskable icon has transparency, a missing dark hole, or important content outside its safe circle');
+    if(!maskable)throw new Error('Maskable icon has transparency, old dark padding at its edges, a missing dark hole, or important content outside its safe circle');
     console.log('Maskable icon opacity and safe zone: passed');
     // Actual navigator offline/online events, with real browser timers.
     await page.goto('http://localhost:5011/fixture/?native=true');
