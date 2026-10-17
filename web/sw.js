@@ -1,10 +1,20 @@
-const CACHE_NAME = 'pi-dashboard-cache-v5-query-row-height';
+const CACHE_NAME = 'pi-dashboard-cache-v12-plain-ranking-counts';
 const APP_SHELL = [
   '{{CACHE_URL}}',
   '{{CACHE_URL}}css/style.css',
   '{{CACHE_URL}}css/dashboard.css',
   '{{CACHE_URL}}js/dashboard-core.js',
+  '{{CACHE_URL}}js/theme.js',
+  '{{CACHE_URL}}js/network-insights.js',
   '{{CACHE_URL}}js/app.js',
+  '{{CACHE_URL}}icons/icon-maskable-512.png',
+  '{{CACHE_URL}}icons/icon.svg',
+  '{{CACHE_URL}}icons/favicon.svg',
+  '{{CACHE_URL}}icons/icon-192.png',
+  '{{CACHE_URL}}icons/icon-512.png',
+  '{{CACHE_URL}}icons/icon-32.png',
+  '{{CACHE_URL}}icons/icon-16.png',
+  '{{CACHE_URL}}icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', event => {
@@ -27,7 +37,7 @@ self.addEventListener('fetch', event => {
   if (!url.pathname.startsWith(base)) return;
   const relative = url.pathname.slice(base.length);
   // API responses contain live DNS information and must never enter CacheStorage.
-  if (['init', 'data', 'queries', 'health'].includes(relative)) return;
+  if (['init', 'data', 'queries', 'devices', 'insights', 'health'].includes(relative)) return;
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).then(response => {

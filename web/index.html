@@ -4,26 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pi-hole Dashboard</title>
-    <link rel="icon" href="{{ICON_URL}}" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="icons/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" id="theme-color-meta" content="#1f2937" />
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="css/dashboard.css" />
-    <script>
-      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-        document.getElementById('theme-color-meta').setAttribute('content', '#111827');
-      } else {
-        document.documentElement.classList.remove('dark');
-        document.getElementById('theme-color-meta').setAttribute('content', '#f9fafb');
-      }
-    </script>
+    <script src="js/theme.js"></script>
   </head>
   <body class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 transition-colors duration-300">
     <div id="main-wrapper" class="w-full mx-auto relative z-10">
       <header class="text-center mb-6">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Pi-Dash</h1>
         <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400">Last updated: Never</p>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme: System">&#9680;</button>
       </header>
       <section id="network-summary" hidden class="bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
         <div class="network-heading">
@@ -36,6 +32,26 @@
           <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked</div><div class="network-blocked font-medium text-red-500">--</div></div>
           <div><div class="text-xs text-gray-500 dark:text-gray-400">Blocked %</div><div class="network-percent font-medium text-yellow-600 dark:text-yellow-500">--%</div></div>
           <div><div class="text-xs text-gray-500 dark:text-gray-400">Cached / Forwarded</div><div class="network-cache font-medium text-indigo-500">-- / --</div></div>
+        </div>
+        <button id="insights-toggle" class="insights-toggle" type="button" aria-expanded="false" aria-controls="network-insights">Show network insights</button>
+        <div id="network-insights" class="network-insights" hidden>
+          <div class="insights-columns">
+            <section class="insight-column" aria-labelledby="history-heading">
+              <h3 id="history-heading">Query activity</h3>
+              <div id="network-history" class="network-history"><p class="insight-empty">Loading activity…</p></div>
+              <p id="history-status" class="insight-status"></p>
+            </section>
+            <section class="insight-column" aria-labelledby="clients-heading">
+              <h3 id="clients-heading">Top clients</h3>
+              <ol id="network-clients" class="ranking-list"></ol>
+              <p id="clients-status" class="insight-status">Loading clients…</p>
+            </section>
+            <section class="insight-column" aria-labelledby="domains-heading">
+              <h3 id="domains-heading">Top blocked domains</h3>
+              <ol id="network-domains" class="ranking-list ranking-blocked"></ol>
+              <p id="domains-status" class="insight-status">Loading domains…</p>
+            </section>
+          </div>
         </div>
       </section>
       <main class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4"></main>
@@ -51,6 +67,7 @@
       <ul id="background-queries" aria-label="Recent DNS query activity"></ul>
     </section>
     <script src="js/dashboard-core.js"></script>
+    <script src="js/network-insights.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>

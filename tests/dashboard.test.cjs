@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
-const core = require('../js/dashboard-core.js');
+const core = require('../web/js/dashboard-core.js');
 
 const root = path.resolve(__dirname, '..');
-const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const read = file => fs.readFileSync(path.join(root, 'web', file), 'utf8');
 const sample = {
   queries: { total: 100, blocked: 25, percent_blocked: 25, frequency: 2, cached: 40, forwarded: 35, unique_domains: 20 },
   clients: { active: 4 }, gravity: { domains_being_blocked: 1000 },
@@ -45,6 +45,7 @@ function makeBrowser(options = {}) {
     return { ok: true, json: async () => data };
   };
   window.eval(read('js/dashboard-core.js'));
+  window.eval(read('js/network-insights.js'));
   window.eval(read('js/app.js'));
   const settle = async () => { await new Promise(resolve => window.setTimeout(resolve, 0)); };
   return {
@@ -99,7 +100,9 @@ test('mobile card starts compact and expands all desktop metrics', async () => {
     const doc = app.window.document;
     const card = doc.querySelector('.instance-card');
     assert.equal(card.querySelectorAll('.mobile-metric').length, 3);
-    assert.equal(card.querySelectorAll('.instance-details .metric-row').length, 7);
+    assert.equal(card.querySelectorAll('.instance-details [data-value]').length, 5);
+    assert.match(card.textContent, /Lists updated/);
+    assert.equal(card.textContent.includes('Unique Domains'), false);
     assert.equal(card.querySelector('.pihole-latency'), null);
     const toggle = card.querySelector('.instance-toggle');
     assert.equal(toggle.getAttribute('aria-expanded'), 'false');

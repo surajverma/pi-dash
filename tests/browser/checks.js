@@ -15,7 +15,8 @@ function geometry(d, stage) {
   const panel = bounds(panelElement);
   const ambient = d.defaultView.getComputedStyle(panelElement).position === 'fixed';
   if (ambient) {
-    assert(Math.abs(bounds(d.querySelector('#main-wrapper')).width - 576) < 1, `${stage}: original desktop width changed`);
+    const maximum = d.querySelector('#main-wrapper').classList.contains('has-network-insights') ? 896 : 768;
+    assert(Math.abs(bounds(d.querySelector('#main-wrapper')).width - Math.min(maximum, width - 32)) < 1, `${stage}: desktop width does not match insights setting`);
     assert(Math.abs(panel.left) < 1 && Math.abs(panel.width - width) < 1, `${stage}: background feed is not viewport-wide`);
     assert(!shown(d.querySelector('.query-panel-header')), `${stage}: desktop feed became a foreground panel`);
   }
@@ -66,7 +67,9 @@ async function checkLayout(width, height, scenario, dark) {
     assert(toggle.getAttribute('aria-expanded') === 'false', 'initial expanded state');
     const details = d.getElementById(toggle.getAttribute('aria-controls'));
     assert(shown(details) === !compact, 'wrong metric visibility');
-    assert(details.children.length === 7, 'missing desktop metrics');
+    assert(details.querySelectorAll('[data-value]').length === 5, 'missing DNS metrics');
+    assert(details.querySelectorAll('[data-device]').length === 4, 'missing optional readings');
+    assert(!details.textContent.includes('Unique Domains'), 'unique domains must remain removed');
     assert(toggle.getAttribute('aria-label').includes('details for '), 'missing per-instance accessible name');
     if (compact) {
       toggle.click();
@@ -74,6 +77,20 @@ async function checkLayout(width, height, scenario, dark) {
     }
   }
   geometry(d, 'expanded');
+  if (scenario !== 'zero') {
+    const insights = d.querySelector('#network-insights');
+    const toggle = d.querySelector('#insights-toggle');
+    assert(shown(insights) === !compact, 'wrong insights visibility');
+    assert(shown(toggle) === compact, 'desktop insights must stay open');
+    if (compact) toggle.click();
+    await settle();
+    assert(shown(insights) && insights.querySelector('svg'), 'insights did not load');
+    const columns = [...d.querySelectorAll('.insight-column')];
+    if (!compact) assert(Math.max(...columns.map(e=>bounds(e).top))-Math.min(...columns.map(e=>bounds(e).top)) < 1, 'desktop insights are not three columns');
+    const rank = d.querySelector('.ranking-row');
+    if (rank) { rank.click(); assert(rank.getAttribute('aria-expanded') === 'true', 'full ranking name cannot be revealed'); }
+    geometry(d, 'insights open');
+  }
   const queryToggle = d.querySelector('#query-toggle');
   if (compact) queryToggle.click();
   assert(shown(d.querySelector('#background-queries')), 'query feed did not open');
@@ -128,7 +145,7 @@ async function checkLayout(width, height, scenario, dark) {
 async function checkLifecycle() {
   const d = await loadViewport(375, 667, 'normal', false);
   const w = frame.contentWindow, f = w.fixture;
-  const expectedTimers = () => assert(JSON.stringify([...f.timers.values()].map(t => t.ms).sort((a,b)=>a-b)) === '[1000,2000,3000]', 'duplicate or missing polling timers');
+  const expectedTimers = () => assert(JSON.stringify([...f.timers.values()].map(t => t.ms).sort((a,b)=>a-b)) === '[1000,2000,3000,30000]', 'duplicate or missing polling timers');
   expectedTimers();
   // Keep requests pending even after abort, like a late response/body or ignored abort.
   const oldStats = f.defer('data'), oldQueries = f.defer('queries');

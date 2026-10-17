@@ -13,29 +13,35 @@ Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole insta
 ## Features
 
 - **Multiple Pi-hole Support:** Monitor all your Pi-hole instances from a single dashboard.
-- **Network Summary:** View combined query, blocked, cached, and forwarded totals across reporting Pi-holes.
-- **Pi-hole Status:** See reachability, authentication errors, and blocking ON/OFF state for each instance.
-- **Responsive Design:** Desktop shows the full dashboard and ambient query feed. Mobile shows critical metrics in compact cards, with an accessible control to expand all available metrics.
-- **Live Query Feed:** Optionally show recent allowed and blocked domains. Consecutive duplicate queries are grouped with `(x2)`, `(x3)`, and similar counts.
-- **Configurable Refresh:** Set separate refresh intervals for statistics and queries. If the query interval is omitted, it uses the statistics interval.
-- **Efficient Polling:** Polling stops while the page is hidden or the browser is offline, then resumes safely when it becomes active again. A short shared cache reduces duplicate Pi-hole API requests.
-- **Lightweight and Fast:** Built with Flask and vanilla JavaScript, with no database or frontend framework.
-- **Dark Mode and PWA Support:** Works with your preferred color scheme and can be installed as a Progressive Web App.
+- **Network Summary:** View combined query, blocked, cached, and forwarded totals.
+- **Network Insights (Optional):** View query history, top clients, and top blocked domains.
+- **Device Health:** See CPU, RAM, temperature, and uptime for each Pi-hole.
+- **Pi-hole Status:** See reachability, authentication errors, and blocking ON/OFF state.
+- **Responsive Design:** Works on desktop and mobile, with expandable details on smaller screens.
+- **Live Query Feed:** Optionally show recent allowed and blocked domains.
+- **Configurable Refresh:** Set separate refresh intervals for statistics and queries.
+- **Lightweight and Fast:** Built with Flask and vanilla JavaScript, with minimal dependencies.
+- **Dark Mode and PWA Support:** Follows your system theme and can be installed as an app.
 
-## Mobile View in Dark Mode
-<img width="1170" height="684" alt="image" src="https://github.com/user-attachments/assets/b2b78439-bb6b-41c5-b61f-739ab071b871" />
+## Screenshots
 
+### Desktop: default view (light mode)
 
+![Desktop default view](docs/screenshots/desktop-default-light.png)
 
+### Desktop: optional network insights (dark mode)
 
-## Desktop view in Light mode
-<img width="2485" height="1468" alt="image" src="https://github.com/user-attachments/assets/4e2d39b4-9b4f-40a3-8c0e-a25bdd337cc8" />
+![Desktop with network insights](docs/screenshots/desktop-insights-dark.png)
 
+### Mobile: compact and expanded views (dark mode)
 
+| Compact default | First instance expanded |
+| --- | --- |
+| <img src="docs/screenshots/mobile-default-dark.png" width="340" alt="Mobile compact view"> | <img src="docs/screenshots/mobile-details-dark.png" width="340" alt="Mobile expanded view"> |
 
 ## Configuration
 
-Copy `config-example.json` to `config.json` and edit it for your network. The example is valid JSON without comments; all options and their defaults are described below.
+Copy `config-example.json` to `config.json` and edit it for your network. Omitted options use the defaults below.
 
 ### 1. `config.json`
 
@@ -65,76 +71,49 @@ Copy `config-example.json` to `config.json` and edit it for your network. The ex
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `base_path` | `/` | Subpath where Pi-Dash is hosted, for example `/pi-dash/`. |
+| `base_path` | `/` | Hosting subpath, for example `/pi-dash/`. |
 | `refresh_interval` | `5000` | Statistics refresh interval in milliseconds. |
 | `queries_refresh_interval` | `refresh_interval` | Query-feed refresh interval in milliseconds. |
-| `cache_ttl` | Automatic | Shared backend cache lifetime in milliseconds. Set to `0` to disable caching. |
-| `show_queries` | `false` | Show the live DNS query feed. Allowed queries are green and blocked queries are red. |
-| `show_network_summary` | `true` | Show combined statistics from all reporting Pi-holes. |
-| `show_trends` | `true` | Show short, in-memory query-rate sparklines. |
-| `piholes` | `[]` | List of Pi-hole instances to monitor. |
-
-When `cache_ttl` is omitted, Pi-Dash calculates it as half of the shortest refresh interval, with a minimum of 100 ms and a maximum of 1000 ms. The values in `config-example.json` are recommended example settings; omitted options use the defaults above.
+| `cache_ttl` | Automatic | Shared cache lifetime in milliseconds; `0` disables caching. |
+| `show_queries` | `false` | Show recent allowed and blocked DNS queries. |
+| `show_network_summary` | `true` | Show combined statistics from reporting Pi-holes. |
+| `show_trends` | `true` | Show query-rate sparklines. |
+| `show_network_insights` | `false` | Show history and top-five rankings; requires Network Summary. |
+| `show_device_metrics` | `true` | Show CPU, RAM, temperature, and uptime in instance details. |
+| `piholes` | `[]` | Pi-hole instances to monitor. |
 
 #### Pi-hole options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `name` | Required | Display name for the Pi-hole. Names must be unique. |
-| `address` | Required | Full Pi-hole base URL, including the scheme and optional port. Do not include `/admin` or `/api`. |
-| `password` | Empty string | Pi-hole API/application password. Literal values and `${ENV_NAME}` references are supported. |
-| `enabled` | `true` | Set to `false` to hide and stop monitoring an instance without deleting it from the configuration. |
-| `link` | `false` | Make the Pi-hole name a link to its admin interface. |
-| `verify_ssl` | `false` | Set to `true` to verify trusted HTTPS certificates, or provide a CA bundle path. |
+| `name` | Required | Unique display name for the Pi-hole. |
+| `address` | Required | Full base URL with scheme and optional port; omit `/admin` and `/api`. |
+| `password` | Empty string | API/application password or `${ENV_NAME}` reference. |
+| `enabled` | `true` | Set to `false` to hide and stop monitoring the instance. |
+| `link` | `false` | Link the instance name to its admin interface. |
+| `verify_ssl` | `false` | Verify HTTPS certificates with `true`, or provide a CA bundle path. |
 
-Settings omitted from `config.json` use the defaults above, so existing configurations continue to work. Existing installations may also continue storing the password directly in `config.json`:
-
-```json
-"password": "your_app_password_here"
-```
-
-For new installations, the password can instead be kept outside `config.json` by referencing an environment variable:
-
-```json
-"password": "${PIHOLE_PRIMARY_PASSWORD}"
-```
-
-With Docker Compose, add the corresponding value to a `.env` file beside `compose.yaml`:
+Use a literal password or a `${ENV_NAME}` reference. For the example above, create a `.env` file beside `compose.yaml`:
 
 ```dotenv
 PIHOLE_PRIMARY_PASSWORD=your_app_password_here
 ```
 
-The Compose example below passes this variable to Pi-Dash. For Docker Run, use `--env-file .env`; for a native installation, export the variable in your shell before starting Pi-Dash. The same `${ENV_NAME}` syntax can be used for a CA bundle path. The `.env` file is ignored by this repository and should not be committed to GitHub.
+Compose passes this variable below; Docker Run uses `--env-file .env`. For native installs, export it before starting Pi-Dash. Keep `.env` out of version control.
 
-The Network Summary includes only additive DNS counters: total queries, blocked queries, cached queries, and forwarded queries. It does not combine active clients, unique domains, or domains on lists because those values can overlap between Pi-holes. If an instance is unavailable, the summary is marked as partial.
+#### Good to know
 
-When the query feed is enabled, it displays recent queries while the dashboard is visible and online. Only consecutive entries with the same Pi-hole, domain, and blocked/allowed state are grouped. The feed is intended as a live overview; use Pi-hole's query log for complete history.
+- Installing Pi-Dash as an app (PWA) requires HTTPS or localhost.
+- Pi-Dash has no login of its own, so keep it on your LAN or behind a reverse proxy with authentication.
+- Restart the container or process after changing `config.json`.
 
 ### 2. `manifest.json` (Optional)
 
-This file contains the Progressive Web App name, colors, and icon:
+If `/app/manifest.json` is mounted, Pi-Dash uses it; otherwise it uses the built-in manifest. To customize it, copy `web/manifest.json`, edit it, and mount it.
 
-```json
-{
-  "name": "Pi-Dash",
-  "short_name": "Pi-Dash",
-  "description": "A simple dashboard to monitor Pi-hole status.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#111827",
-  "theme_color": "#06b6d4",
-  "icons": [
-    {
-      "src": "https://pi.hole/admin/img/logo.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml"
-    }
-  ]
-}
-```
+Icons in a custom manifest must load in the browser: prefer relative paths or a publicly trusted HTTPS URL. An icon on a host with an untrusted self-signed certificate, such as `https://pi.hole`, can block the install prompt.
 
-Replace `icons.src` with a direct link to your Pi-hole logo or preferred icon.
+Create the host file before enabling a manifest mount; if it does not exist, Docker creates an empty folder in its place.
 
 ---
 
@@ -153,19 +132,21 @@ services:
       PIHOLE_PRIMARY_PASSWORD: "${PIHOLE_PRIMARY_PASSWORD}"
     volumes:
       - ./config.json:/app/config.json:ro
-      - ./manifest.json:/app/manifest.json:ro
+      # Optional: create manifest.json first, then uncomment.
+      # - ./manifest.json:/app/manifest.json:ro
     restart: unless-stopped
 ```
 
 ### Docker Run
 
 ```bash
+# Optional: create manifest.json first, then add this mount before the image.
+#   -v /path/to/pi-dash/manifest.json:/app/manifest.json:ro \
 docker run -d \
   --name pi-dash \
   -p 5001:5001 \
   --env-file .env \
   -v /path/to/pi-dash/config.json:/app/config.json:ro \
-  -v /path/to/pi-dash/manifest.json:/app/manifest.json:ro \
   ghcr.io/surajverma/pi-dash:latest
 ```
 
@@ -190,21 +171,19 @@ docker run -d \
 3. Start Pi-Dash:
 
    ```bash
-   python proxy.py
+   python -m pi_dash
    ```
 
 Open `http://localhost:5001` in your browser.
 
 ## Health Check
 
-`GET /health` reports whether the Pi-Dash application is running. It does not contact the configured Pi-hole instances.
+`GET /health` reports whether Pi-Dash is running without contacting your Pi-holes.
 
 ## Development
 
-The automated tests use mocked Pi-hole responses and do not require a live Pi-hole:
-
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests
 npm ci
 npm run test:js
 npm run build:css

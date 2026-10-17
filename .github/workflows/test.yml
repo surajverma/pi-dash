@@ -27,7 +27,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Compile-check backend
-        run: python -m py_compile proxy.py
+        run: python -m py_compile pi_dash/*.py
 
       - uses: actions/setup-node@v7
         with:
@@ -39,9 +39,11 @@ jobs:
 
       - name: Syntax-check frontend and service worker
         run: |
-          node --check js/dashboard-core.js
-          node --check js/app.js
-          node --check sw.js
+          node --check web/js/dashboard-core.js
+          node --check web/js/app.js
+          node --check web/js/network-insights.js
+          node --check web/js/theme.js
+          node --check web/sw.js
 
       - name: Run frontend behavior regressions
         run: npm run test:js
@@ -49,7 +51,7 @@ jobs:
       - name: Verify Tailwind build
         run: |
           npm run build:css
-          git diff --exit-code -- css/style.css
+          git diff --exit-code -- web/css/style.css
 
       - name: Install rendered-test browser
         run: npx playwright install --with-deps chromium
@@ -66,11 +68,11 @@ jobs:
 
       - name: Verify the shipped HTML, scripts and styles
         run: |
-          test -s css/style.css
-          test -s css/dashboard.css
-          test -s js/dashboard-core.js
-          test -s js/app.js
-          node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8'); for(const file of ['css/style.css','css/dashboard.css','js/dashboard-core.js','js/app.js']) { if(!html.includes(file)||!fs.existsSync(file)) process.exit(1); }"
+          test -s web/css/style.css
+          test -s web/css/dashboard.css
+          test -s web/js/dashboard-core.js
+          test -s web/js/app.js
+          node -e "const fs=require('fs'); const html=fs.readFileSync('web/index.html','utf8'); for(const file of ['css/style.css','css/dashboard.css','js/dashboard-core.js','js/app.js']) { if(!html.includes(file)||!fs.existsSync('web/'+file)) process.exit(1); }"
 
       - name: Build Docker image
         run: docker build --tag pi-dash:test .
@@ -83,6 +85,9 @@ jobs:
             pi-dash:test
           for attempt in {1..20}; do
             if curl --fail --silent http://127.0.0.1:5001/health; then
+              for path in / /manifest.json /sw.js; do
+                curl --fail --silent "http://127.0.0.1:5001$path" > /dev/null || exit 1
+              done
               exit 0
             fi
             sleep 1

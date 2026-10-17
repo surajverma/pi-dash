@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   'use strict';
   const core = window.PiDashCore;
+  const insights = window.PiDashInsights;
   if (!core) throw new Error('Pi-Dash core is missing');
 
   const MAX_ROWS = 100;
@@ -11,8 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ['blocked', 'Queries Blocked', 'text-red-500'],
     ['percentage', 'Percent Blocked', 'text-yellow-600 dark:text-yellow-500'],
     ['cache', 'Cached / Forwarded', 'text-indigo-500'],
-    ['unique', 'Unique Domains', 'text-orange-500'],
-    ['clients', 'Active Clients', 'text-purple-500'],
     ['domains', 'Domains on Lists', 'text-green-600 dark:text-green-500'],
   ];
   const cards = new Map();
@@ -21,10 +20,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const queryRows = [];
   let pendingQueries = [];
   let appConfig = null;
-  let statsTimer = null, queriesTimer = null, stalenessTimer = null;
+  let statsTimer = null, queriesTimer = null, stalenessTimer = null, optionalTimer = null;
   let statsController = null, queriesController = null, initController = null;
+  const optionalRetries = new Map();
+  const optionalControllers = new Map(), optionalUpdated = new Map();
+  const compactViewport = window.matchMedia?.('(max-width: 767px), (max-width: 1024px) and (max-height: 500px)');
   let lastUpdateTime = null, manualPause = false, hoverPause = false;
   let foregroundGeneration = 0;
+  let pollingPaused = false;
 
   const main = document.querySelector('main');
   const network = document.getElementById('network-summary');
@@ -33,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const queryToggle = document.getElementById('query-toggle');
   const pauseButton = document.getElementById('query-pause');
   const timestamp = document.getElementById('last-updated');
+  const insightsPanel = document.getElementById('network-insights');
+  const insightsToggle = document.getElementById('insights-toggle');
   const number = value => {
     const parsed = Number(value);
     return (Number.isFinite(parsed) ? parsed : 0).toLocaleString();
@@ -95,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const healthLine = element('div', 'instance-health');
     const dot = element('span', 'status-dot status-neutral');
     const health = element('span', 'pihole-health', 'Checking');
-    healthLine.append(dot, health);
+    healthLine.append(dot, health, element('span', 'instance-clients', '· -- active clients'));
     identity.append(nameLine, healthLine);
     const sparkline = element('div', 'pihole-sparkline');
     sparkline.setAttribute('aria-hidden', 'true');
@@ -110,7 +115,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const details = element('div', 'instance-details');
     details.id = `instance-details-${index}`;
-    for (const [key, label, color] of metrics) addMetric(details, key, label, color);
+    const dns = element('div', 'metric-group');
+    for (const [key, label, color] of metrics) {
+      addMetric(dns, key, label, color);
+    }
+    const gravityAge = element('div', 'metric-row');
+    gravityAge.append(element('span', 'metric-label', 'Lists updated'), element('span', 'metric-value gravity-age', 'Unavailable'));
+    dns.append(gravityAge);
+    if (appConfig.show_device_metrics) {
+      const device = element('div', 'metric-group device-group');
+      device.setAttribute('role', 'group');
+      device.setAttribute('aria-label', 'Device health');
+      for (const [key, label] of [['cpu_percent', 'CPU'], ['ram_percent', 'RAM'], ['temperature', 'Temp'], ['uptime_seconds', 'Up']]) {
+        const row = element('div', 'metric-row');
+        const value = element('span', 'metric-value', 'Loading…');
+        value.dataset.device = key;
+        row.title = key === 'uptime_seconds' ? 'System uptime' : key === 'temperature' ? 'CPU temperature' : label;
+        row.append(element('span', 'metric-label', label), value);
+        device.append(row);
+      }
+      const note = element('p', 'device-note insight-status');
+      device.append(note);
+      details.append(dns, device);
+    } else details.append(dns);
     section.append(details);
     const toggle = element('button', 'instance-toggle', 'Show details');
     toggle.type = 'button';
@@ -122,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
       toggle.setAttribute('aria-expanded', String(expanded));
       toggle.textContent = expanded ? 'Hide details' : 'Show details';
       toggle.setAttribute('aria-label', `${toggle.textContent} for ${pihole.name}`);
+      if (expanded) refreshOptional();
     });
     section.append(toggle);
     cards.set(pihole.name, section);
@@ -158,6 +186,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const meta = raw?._pi_dash || {};
     const failed = !raw || !!raw.error || !raw.queries;
     const status = core.healthPresentation(meta, failed);
+    const recovered = section.dataset.healthState === 'danger' && !failed;
+    section.dataset.healthState = status.state;
+    if (recovered) { optionalUpdated.delete('devices'); refreshOptional(); }
     section.querySelector('.status-dot').className = `status-dot status-${status.state}`;
     const health = section.querySelector('.pihole-health');
     health.className = `pihole-health status-text-${status.state}`;
@@ -168,11 +199,18 @@ document.addEventListener('DOMContentLoaded', () => {
       total: number(stats.total), blocked: number(stats.blocked),
       percentage: `${stats.percentage.toFixed(1)}%`,
       cache: `${number(stats.cached)} / ${number(stats.forwarded)}`,
-      unique: number(stats.unique), clients: number(stats.clients), domains: number(stats.domains),
+      domains: number(stats.domains),
     };
     section.querySelectorAll('[data-value]').forEach(node => {
       node.textContent = values[node.dataset.value] ?? (node.dataset.value === 'percentage' ? '--%' : '--');
     });
+    section.querySelector('.instance-clients').textContent = failed ? '· Clients unavailable' : `· ${number(stats.clients)} active clients`;
+    section.querySelector('.gravity-age').textContent = failed ? 'Unavailable' : insights.age(raw?.gravity?.last_update);
+    if (failed) {
+      section.querySelectorAll('[data-device]').forEach(node => { node.textContent = 'Unavailable'; });
+      const note = section.querySelector('.device-note');
+      if (note) note.textContent = 'Device readings unavailable while Pi-hole is offline';
+    }
     if (failed) { section.querySelector('.pihole-sparkline').replaceChildren(); trendHistory.delete(name); }
     else renderSparkline(name, section, stats.rate);
   }
@@ -194,10 +232,23 @@ document.addEventListener('DOMContentLoaded', () => {
     lastUpdateTime = Date.now();
     timestamp.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
     timestamp.classList.remove('is-stale');
+    updateStaleness();
   }
   function updateStaleness() {
     if (!lastUpdateTime || !appConfig) return;
-    timestamp.classList.toggle('is-stale', Date.now() - lastUpdateTime > appConfig.refresh_interval * 2);
+    const stale = pollingPaused || !visible() || Date.now() - lastUpdateTime > Math.max(10000, appConfig.refresh_interval * 2);
+    timestamp.classList.toggle('is-stale', stale);
+    for (const section of cards.values()) {
+      const dot = section.querySelector('.status-dot');
+      const state = section.dataset.healthState || 'neutral';
+      dot.className = `status-dot status-${stale && state === 'success' ? 'neutral' : state}`;
+      dot.classList.toggle('is-live', !stale && state === 'success');
+      if (state === 'success') {
+        const health = section.querySelector('.pihole-health');
+        health.className = `pihole-health status-text-${stale ? 'neutral' : 'success'}`;
+        if (stale) health.textContent = navigator.onLine === false ? 'Offline · last known ON' : 'Stale · last known ON';
+      }
+    }
   }
 
   function renderQueryRows() {
@@ -273,12 +324,71 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function insightsEnabled() { return appConfig?.show_network_summary && appConfig?.show_network_insights; }
+  function insightsVisible() { return !compactViewport?.matches || network.classList.contains('insights-open'); }
+
+  async function refreshOptionalKind(kind) {
+    if (!visible() || optionalControllers.has(kind) || !cards.size) return;
+    if (Date.now() - (optionalUpdated.get(kind) || 0) < (appConfig.optional_refresh_interval || 30000)) return;
+    const generation = foregroundGeneration, controller = new AbortController();
+    optionalControllers.set(kind, controller);
+    try {
+      const payload = await fetchData(kind, controller.signal);
+      if (!canApply(generation, controller.signal)) return;
+      if (payload.refreshing) {
+        clearTimeout(optionalRetries.get(kind));
+        optionalRetries.set(kind, setTimeout(() => { optionalRetries.delete(kind); refreshOptional(); }, 2000));
+        if (!payload.updated_at) return;
+      } else {
+        clearTimeout(optionalRetries.get(kind)); optionalRetries.delete(kind);
+        optionalUpdated.set(kind, Date.now());
+      }
+      if (kind === 'devices') {
+        for (const [name, section] of cards) {
+          if (section.dataset.healthState === 'danger') continue;
+          const data = payload.devices?.[name] || {};
+          const values = insights.deviceValues(data);
+          section.querySelectorAll('[data-device]').forEach(node => { node.textContent = values[node.dataset.device]; });
+          const note = section.querySelector('.device-note');
+          const age = typeof payload.updated_at === 'number' ? insights.age(payload.updated_at) : '';
+          if (note) note.textContent = payload.refreshing ? 'Refreshing · showing previous readings' : data.unavailable?.length ? 'Some readings are unavailable' : age && age !== 'Just now' ? `Readings: ${age}` : '';
+        }
+      } else if (!payload.disabled) {
+        insights.renderHistory(document.getElementById('network-history'), document.getElementById('history-status'), payload.history);
+        insights.renderRanking(document.getElementById('network-clients'), document.getElementById('clients-status'), payload.clients, 'Clients');
+        insights.renderRanking(document.getElementById('network-domains'), document.getElementById('domains-status'), payload.domains, 'Blocked domains');
+        if (payload.refreshing) document.getElementById('history-status').textContent = 'Refreshing · showing previous data';
+      }
+    } catch (error) {
+      if (!canApply(generation, controller.signal) || error.name === 'AbortError') return;
+      if (kind === 'devices') {
+        for (const section of cards.values()) {
+          section.querySelectorAll('[data-device]').forEach(node => { node.textContent = 'Unavailable'; });
+          const note = section.querySelector('.device-note');
+          if (note) note.textContent = 'Unable to refresh device readings';
+        }
+      } else {
+        for (const id of ['history-status', 'clients-status', 'domains-status']) document.getElementById(id).textContent = 'Unable to refresh · previous data may be stale';
+      }
+    } finally { if (optionalControllers.get(kind) === controller) optionalControllers.delete(kind); }
+  }
+  function refreshOptional() {
+    if (!appConfig) return;
+    if (insightsEnabled() && insightsVisible()) refreshOptionalKind('insights');
+    if (appConfig.show_device_metrics && (!compactViewport?.matches || [...cards.values()].some(card => card.classList.contains('is-expanded')))) refreshOptionalKind('devices');
+  }
+
   function stopTimers() {
+    pollingPaused = true;
     foregroundGeneration++;
     clearInterval(statsTimer); clearInterval(queriesTimer); clearInterval(stalenessTimer);
+    clearInterval(optionalTimer); optionalTimer = null;
     statsTimer = queriesTimer = stalenessTimer = null;
     initController?.abort(); statsController?.abort(); queriesController?.abort();
     initController = statsController = queriesController = null;
+    optionalRetries.forEach(timer => clearTimeout(timer)); optionalRetries.clear();
+    optionalControllers.forEach(controller => controller.abort()); optionalControllers.clear();
+    updateStaleness();
   }
 
   function startTimers() {
@@ -286,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
     statsTimer = setInterval(refreshStats, appConfig.refresh_interval);
     if (appConfig.show_queries) queriesTimer = setInterval(refreshQueries, appConfig.queries_refresh_interval);
     stalenessTimer = setInterval(updateStaleness, 1000);
+    if (insightsEnabled() || appConfig.show_device_metrics) optionalTimer = setInterval(refreshOptional, appConfig.optional_refresh_interval || 30000);
   }
 
   async function init() {
@@ -297,15 +408,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await fetchData('init', controller.signal);
       if (!canApply(generation, controller.signal)) return;
       appConfig = data.config;
+      document.getElementById('main-wrapper').classList.toggle('has-network-insights', Boolean(insightsEnabled()));
+      pollingPaused = false;
+      optionalUpdated.clear();
+      insightsPanel.hidden = !insightsEnabled();
+      insightsToggle.hidden = !insightsEnabled();
       main.replaceChildren(); cards.clear();
       for (const [index, pihole] of (appConfig.piholes || []).entries()) main.append(createCard(pihole, index));
       if (!cards.size) main.append(element('p', 'empty-message', 'No Pi-holes are enabled. Check config.json.'));
+      if (!cards.size) { insightsPanel.hidden = true; insightsToggle.hidden = true; }
       for (const [name, raw] of Object.entries(data.data || {})) updatePiholeUI(name, raw);
       updateNetworkSummary(data.summary);
       queryPanel.hidden = !appConfig.show_queries;
       if (data.queries) renderQueries(data.queries);
       updateTimestamp();
       startTimers();
+      refreshOptional();
     } catch (error) {
       if (canApply(generation, controller.signal) && error.name !== 'AbortError') {
         console.error('Failed to initialize dashboard:', error);
@@ -321,8 +439,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resumeForeground() {
     if (!visible()) return;
+    pollingPaused = false;
     if (!appConfig) { init(); return; }
-    refreshStats(); refreshQueries(); startTimers();
+    optionalUpdated.clear();
+    refreshStats(); refreshQueries(); refreshOptional(); startTimers();
   }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) stopTimers(); else resumeForeground();
@@ -331,6 +451,14 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('online', resumeForeground);
   window.addEventListener('pagehide', stopTimers);
   window.addEventListener('pageshow', resumeForeground);
+
+  insightsToggle.addEventListener('click', () => {
+    const open = network.classList.toggle('insights-open');
+    insightsToggle.setAttribute('aria-expanded', String(open));
+    insightsToggle.textContent = open ? 'Hide network insights' : 'Show network insights';
+    if (open) refreshOptional();
+  });
+  compactViewport?.addEventListener?.('change', refreshOptional);
 
   queryToggle.addEventListener('click', () => {
     const open = queryPanel.classList.toggle('is-open');

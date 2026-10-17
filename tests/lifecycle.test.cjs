@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
-const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+const read = file => fs.readFileSync(path.join(__dirname, '..', 'web', file), 'utf8');
 
 function setup(fetchImpl) {
   const html = read('index.html').replace(/<script[\s\S]*?<\/script>/g, '').replace('{{ICON_URL}}', '');
@@ -18,6 +18,7 @@ function setup(fetchImpl) {
   w.clearInterval = id => timers.delete(id);
   w.fetch = fetchImpl;
   w.eval(read('js/dashboard-core.js'));
+  w.eval(read('js/network-insights.js'));
   w.eval(read('js/app.js'));
   const settle = () => new Promise(resolve => w.setTimeout(resolve, 0));
   return {
