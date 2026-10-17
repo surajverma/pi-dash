@@ -19,17 +19,8 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(view['ram_percent'], 38)
         self.assertEqual(view['uptime_seconds'], 100)
         self.assertIsNone(view['temperature'])
-        self.assertIsNone(view['upstream_ms'])
         self.assertIsNone(device_view({'system': {'system': {'cpu': {'%cpu': -1, 'nprocs': 4}}}})['cpu_percent'])
         self.assertIsNone(device_view({})['ram_percent'])
-
-    def test_upstream_latency_excludes_cache_and_weights_real_servers(self):
-        upstreams = [{'port': 53, 'count': 10, 'statistics': {'response': .01}},
-                     {'port': 5353, 'count': 30, 'statistics': {'response': .03}},
-                     {'port': -1, 'count': 900, 'statistics': {'response': 0}},
-                     {'port': 53, 'count': 50, 'statistics': {'response': 0}},
-                     {'port': 53, 'count': 50, 'statistics': {'response': None}}]
-        self.assertAlmostEqual(device_view({'upstreams': {'upstreams': upstreams}})['upstream_ms'], 25)
 
     def test_client_identity_uses_address_and_canonicalizes_ipv6(self):
         snapshots = {
@@ -97,10 +88,10 @@ class OptionalRouteTests(unittest.TestCase):
         with patch.object(proxy, 'pihole_get', side_effect=read) as fetch:
             with ThreadPoolExecutor(max_workers=2) as pool:
                 results = list(pool.map(lambda _: proxy.fetch_optional('devices'), range(2)))
-            self.assertEqual(fetch.call_count, 3)
+            self.assertEqual(fetch.call_count, 2)
             self.assertEqual(results[0], results[1])
             self.assertEqual(results[0]['devices']['One']['uptime_seconds'], 100)
-            self.assertEqual(results[0]['devices']['One']['unavailable'], ['sensors', 'upstreams'])
+            self.assertEqual(results[0]['devices']['One']['unavailable'], ['sensors'])
             self.assertNotIn('secret', json.dumps(results[0]))
 
     def test_init_does_not_wait_for_optional_metrics(self):

@@ -22,6 +22,18 @@ const root = path.resolve(__dirname, '../..');
     fs.mkdirSync(path.join(root, 'test-results'), { recursive: true });
     await page.screenshot({ path: path.join(root, 'test-results/rendered-results.png'), fullPage: true });
     if (await page.locator('#result').getAttribute('data-status') !== 'passed') process.exitCode = 1;
+    // The normal two-instance dashboard must fit laptop content viewports.
+    for (const height of [768, 680, 640]) {
+      await page.setViewportSize({width:1366,height});
+      await page.goto('http://localhost:5011/fixture/?dark=true');
+      await page.locator('[data-device="cpu_percent"]').first().filter({hasText:'7.2%'}).waitFor();
+      const fit = await page.evaluate(() => ({height:document.documentElement.clientHeight, bottom:document.querySelector('main').getBoundingClientRect().bottom, scroll:document.documentElement.scrollHeight}));
+      if (fit.bottom > fit.height || fit.scroll > fit.height) throw new Error(`Laptop viewport scrolls at 1366x${height}: ${JSON.stringify(fit)}`);
+      if (await page.locator('.rank-track,.metric-group-title,.insights-window,[data-device="upstream_ms"]').count()) throw new Error('Removed decorations remain');
+      if (!(await page.locator('.instance-clients').first().innerText()).includes('18 active clients')) throw new Error('Header client count missing');
+      await page.screenshot({path:path.join(root,`test-results/compact-1366x${height}.png`),fullPage:true});
+    }
+    console.log('Laptop fit at 1366x768, 1366x680 and 1366x640: passed');
     // Actual navigator offline/online events, with real browser timers.
     await page.goto('http://localhost:5011/fixture/?native=true');
     await page.waitForFunction(() => document.querySelector('#native-polling')?.textContent.includes('"timers":4'));

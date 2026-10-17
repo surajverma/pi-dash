@@ -13,7 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ['percentage', 'Percent Blocked', 'text-yellow-600 dark:text-yellow-500'],
     ['cache', 'Cached / Forwarded', 'text-indigo-500'],
     ['unique', 'Unique Domains', 'text-orange-500'],
-    ['clients', 'Active Clients', 'text-purple-500'],
     ['domains', 'Domains on Lists', 'text-green-600 dark:text-green-500'],
   ];
   const cards = new Map();
@@ -101,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const healthLine = element('div', 'instance-health');
     const dot = element('span', 'status-dot status-neutral');
     const health = element('span', 'pihole-health', 'Checking');
-    healthLine.append(dot, health);
+    healthLine.append(dot, health, element('span', 'instance-clients', '· -- active clients'));
     identity.append(nameLine, healthLine);
     const sparkline = element('div', 'pihole-sparkline');
     sparkline.setAttribute('aria-hidden', 'true');
@@ -117,7 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const details = element('div', 'instance-details');
     details.id = `instance-details-${index}`;
     const dns = element('div', 'metric-group');
-    dns.append(element('h3', 'metric-group-title', 'DNS activity'));
     for (const [key, label, color] of metrics) {
       if (key !== 'unique' || appConfig.show_unique_domains) addMetric(dns, key, label, color);
     }
@@ -125,18 +123,14 @@ document.addEventListener('DOMContentLoaded', () => {
     gravityAge.append(element('span', 'metric-label', 'Lists updated'), element('span', 'metric-value gravity-age', 'Unavailable'));
     dns.append(gravityAge);
     if (appConfig.show_device_metrics) {
-      const upstream = element('div', 'metric-row');
-      const value = element('span', 'metric-value', 'Loading…');
-      value.dataset.device = 'upstream_ms';
-      upstream.append(element('span', 'metric-label', 'Upstream response'), value);
-      upstream.title = 'Query-weighted mean upstream response time reported by Pi-hole; excludes local and cached answers.';
-      dns.append(upstream);
       const device = element('div', 'metric-group device-group');
-      device.append(element('h3', 'metric-group-title', 'Device health'));
-      for (const [key, label] of [['cpu_percent', 'CPU'], ['ram_percent', 'RAM'], ['temperature', 'Temperature'], ['uptime_seconds', 'System uptime']]) {
+      device.setAttribute('role', 'group');
+      device.setAttribute('aria-label', 'Device health');
+      for (const [key, label] of [['cpu_percent', 'CPU'], ['ram_percent', 'RAM'], ['temperature', 'Temp'], ['uptime_seconds', 'Up']]) {
         const row = element('div', 'metric-row');
         const value = element('span', 'metric-value', 'Loading…');
         value.dataset.device = key;
+        row.title = key === 'uptime_seconds' ? 'System uptime' : key === 'temperature' ? 'CPU temperature' : label;
         row.append(element('span', 'metric-label', label), value);
         device.append(row);
       }
@@ -208,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     section.querySelectorAll('[data-value]').forEach(node => {
       node.textContent = values[node.dataset.value] ?? (node.dataset.value === 'percentage' ? '--%' : '--');
     });
+    section.querySelector('.instance-clients').textContent = failed ? '· Clients unavailable' : `· ${number(stats.clients)} active clients`;
     section.querySelector('.gravity-age').textContent = failed ? 'Unavailable' : insights.age(raw?.gravity?.last_update);
     if (failed) {
       section.querySelectorAll('[data-device]').forEach(node => { node.textContent = 'Unavailable'; });

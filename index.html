@@ -18,7 +18,7 @@
       <header class="text-center mb-6">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Pi-Dash</h1>
         <p id="last-updated" class="text-xs text-gray-500 dark:text-gray-400">Last updated: Never</p>
-        <button id="theme-toggle" class="theme-toggle" type="button">Theme: System</button>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme: System">&#9680;</button>
       </header>
       <section id="network-summary" hidden class="bg-white dark:bg-gray-900 p-4 rounded-lg shadow-lg w-full mb-6" aria-label="Network summary">
         <div class="network-heading">
@@ -34,7 +34,6 @@
         </div>
         <button id="insights-toggle" class="insights-toggle" type="button" aria-expanded="false" aria-controls="network-insights">Show network insights</button>
         <div id="network-insights" class="network-insights" hidden>
-          <p class="insights-window">Combined Pi-hole rolling data</p>
           <div class="insights-columns">
             <section class="insight-column" aria-labelledby="history-heading">
               <h3 id="history-heading">Query activity</h3>

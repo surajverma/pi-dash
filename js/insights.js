@@ -23,7 +23,6 @@
       ram_percent: known(data.ram_percent) ? `${data.ram_percent.toFixed(1)}%` : 'Unavailable',
       temperature: known(data.temperature) ? `${data.temperature.toFixed(1)}°${data.temperature_unit || 'C'}` : 'Unavailable',
       uptime_seconds: duration(data.uptime_seconds),
-      upstream_ms: known(data.upstream_ms) ? `${data.upstream_ms.toFixed(1)} ms` : 'Unavailable',
     };
   }
   function node(doc, tag, className, text) {
@@ -49,11 +48,6 @@
       button.setAttribute('aria-expanded', 'false');
       button.setAttribute('aria-label', `${button.title}: ${item.count.toLocaleString()} queries, ${item.share.toFixed(1)} percent. Expand name`);
       button.append(node(doc, 'span', 'rank-name', item.label), node(doc, 'span', 'rank-count', item.count.toLocaleString()));
-      const bar = node(doc, 'span', 'rank-track');
-      bar.setAttribute('aria-hidden', 'true');
-      const fill = node(doc, 'span', 'rank-fill');
-      fill.style.width = `${Math.max(0, Math.min(100, item.share))}%`;
-      bar.append(fill); button.append(bar);
       const identity = node(doc, 'span', 'rank-identity', item.id === item.label ? '' : item.id);
       button.append(identity);
       button.addEventListener('click', () => button.setAttribute('aria-expanded', String(button.getAttribute('aria-expanded') !== 'true')));

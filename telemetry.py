@@ -27,22 +27,13 @@ def device_view(parts):
     ram_percent = number(ram.get('%used'))
     if ram_percent is not None and ram_percent > 100:
         ram_percent = None
-    response_total = response_weight = 0
-    for item in parts.get('upstreams', {}).get('upstreams', []):
-        response = number((item.get('statistics') or {}).get('response'))
-        count = number(item.get('count'), 1)
-        # Pi-hole uses zero response time when a mean is not applicable.
-        if number(item.get('port'), 1) is not None and response is not None and response > 0 and count:
-            response_total += response * count
-            response_weight += count
     return {
         'cpu_percent': cpu_percent,
         'ram_percent': ram_percent,
         'temperature': number(sensors.get('cpu_temp'), -100),
         'temperature_unit': sensors.get('unit') if sensors.get('unit') in ('C', 'F', 'K') else 'C',
         'uptime_seconds': number(system.get('uptime')),
-        'upstream_ms': response_total / response_weight * 1000 if response_weight else None,
-        'unavailable': [key for key in ('system', 'sensors', 'upstreams') if key not in parts],
+        'unavailable': [key for key in ('system', 'sensors') if key not in parts],
     }
 
 

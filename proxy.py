@@ -436,8 +436,7 @@ def fetch_optional(kind):
         items = enabled()
         parts = {p['name']: {} for p in items}
         paths = (
-            [('system', '/api/info/system', None), ('sensors', '/api/info/sensors', None),
-             ('upstreams', '/api/stats/upstreams', None)] if kind == 'devices' else
+            [('system', '/api/info/system', None), ('sensors', '/api/info/sensors', None)] if kind == 'devices' else
             [('history', '/api/history', None),
              ('clients', '/api/stats/top_clients', {'count': RANK_LIMIT}),
              ('domains', '/api/stats/top_domains', {'count': RANK_LIMIT, 'blocked': 'true'})]

@@ -15,7 +15,7 @@ Pi-Dash is a simple, lightweight dashboard for monitoring multiple Pi-hole insta
 - **Multiple Pi-hole Support:** Monitor all your Pi-hole instances from a single dashboard.
 - **Network Summary:** View combined query, blocked, cached, and forwarded totals across reporting Pi-holes.
 - **Network Insights:** Desktop shows query history, top combined clients, and top blocked domains in three columns. Mobile loads these when you expand Network Insights.
-- **Device Health:** CPU, RAM, temperature, system uptime, upstream response time, and blocklist update age, grouped separately from the DNS counters. Mobile keeps these inside Show details.
+- **Device Health:** CPU, RAM, temperature, system uptime, and blocklist update age, grouped separately from the DNS counters. Mobile keeps these inside Show details.
 - **Pi-hole Status:** See reachability, authentication errors, and blocking ON/OFF state for each instance.
 - **Responsive Design:** Desktop shows the full dashboard and ambient query feed. Mobile shows critical metrics in compact cards, with an accessible control to expand all available metrics.
 - **Live Query Feed:** Optionally show recent allowed and blocked domains. Consecutive duplicate queries are grouped with `(x2)`, `(x3)`, and similar counts.
@@ -78,7 +78,7 @@ Copy `config-example.json` to `config.json` and edit it for your network. The ex
 | `show_network_summary` | `true` | Show combined statistics from all reporting Pi-holes. |
 | `show_trends` | `true` | Show short, in-memory query-rate sparklines. |
 | `show_network_insights` | `true` | Show combined history and top-five rankings inside Network Summary. Requires `show_network_summary`. |
-| `show_device_metrics` | `true` | Show optional hardware readings and upstream response time in instance details. |
+| `show_device_metrics` | `true` | Show optional hardware readings in instance details. |
 | `show_unique_domains` | `false` | Include Unique Domains in instance details. Domains on Lists is always retained. |
 | `piholes` | `[]` | List of Pi-hole instances to monitor. |
 
@@ -125,9 +125,9 @@ Up to 1,000 source entries per ranking and Pi-hole are combined. If this limit i
 
 Device metrics and network insights load independently of the fast DNS counters, refresh at most every 30 seconds per browser, and share a separate 30-second server cache. Mobile requests them only while the relevant section is expanded. All polling pauses while the page is hidden or offline. An unavailable sensor or unsupported API does not mark a working DNS server offline; its reading displays Unavailable. Healthy status dots pulse gently only while the latest DNS snapshot is fresh, and respect reduced-motion preferences.
 
-CPU is Pi-hole's reported total CPU use divided by the number of processors, displayed on a device-wide 0–100% scale. RAM and system uptime are the system readings, not the FTL process figures. Container installations report the system visible to Pi-hole and may not expose temperature sensors. Upstream response is the query-count-weighted mean response time reported by real upstream servers, converted from seconds to milliseconds; it excludes local and cached answers. Lists updated uses Pi-hole's gravity timestamp. Cached / Forwarded remains the raw pair of counters (Pi-hole's cached count can include locally configured answers).
+CPU is Pi-hole's reported total CPU use divided by the number of processors, displayed on a device-wide 0–100% scale. RAM and system uptime are the system readings, not the FTL process figures. Container installations report the system visible to Pi-hole and may not expose temperature sensors. Lists updated uses Pi-hole's gravity timestamp. Cached / Forwarded remains the raw pair of counters (Pi-hole's cached count can include locally configured answers).
 
-The dashboard follows the system color scheme by default and updates when it changes. Use the small Theme control to cycle through System, Light, and Dark. Existing saved Light/Dark preferences remain respected; select System to return to automatic switching.
+The dashboard follows the system color scheme by default and updates when it changes. Use the corner theme icon to cycle through System, Light, and Dark. Existing saved Light/Dark preferences remain respected; select System to return to automatic switching.
 
 When the query feed is enabled, it displays recent queries while the dashboard is visible and online. Only consecutive entries with the same Pi-hole, domain, and blocked/allowed state are grouped. The feed is intended as a live overview; use Pi-hole's query log for complete history.
 
@@ -260,3 +260,5 @@ Contributions are welcome! If you have any ideas, suggestions, or bug reports, p
 ## Thank You
 
 If you like my work, you can [buy me a coffee ☕](https://ko-fi.com/skv)
+
+The compact desktop view uses header client counts, text-only rankings, and a single hardware strip without section captions. Lists updated remains below Domains on Lists. The normal two-instance layout is checked for no scrolling at 1366×768 and reduced content heights of 680 and 640 pixels. Longer names, extra instances, expanded ranking names, or larger accessibility text may require scrolling.

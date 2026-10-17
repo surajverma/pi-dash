@@ -100,7 +100,7 @@ test('mobile card starts compact and expands all desktop metrics', async () => {
     const doc = app.window.document;
     const card = doc.querySelector('.instance-card');
     assert.equal(card.querySelectorAll('.mobile-metric').length, 3);
-    assert.equal(card.querySelectorAll('.instance-details [data-value]').length, 6);
+    assert.equal(card.querySelectorAll('.instance-details [data-value]').length, 5);
     assert.match(card.textContent, /Lists updated/);
     assert.equal(card.textContent.includes('Unique Domains'), false);
     assert.equal(card.querySelector('.pihole-latency'), null);
