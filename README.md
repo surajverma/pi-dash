@@ -52,6 +52,10 @@ Mobile starts compact. Tap **Show details** to reveal instance counters and hard
 
 Copy `config-example.json` to `config.json` and edit it for your network. The example is valid JSON without comments; all options and their defaults are described below.
 
+Configuration is read at startup, so restart the container or process after changing `config.json`. Pi-Dash loads the path in `PI_DASH_CONFIG` when set, otherwise `config.json` in the repository root (`/app/config.json` in Docker); a missing file stops startup with a clear error.
+
+The dashboard has no login of its own and shows live DNS queries when `show_queries` is enabled, so keep it on the LAN or behind a reverse proxy with authentication.
+
 ### 1. `config.json`
 
 ```json
@@ -139,7 +143,7 @@ Desktop keeps all instance details open, with DNS activity and device health gro
 
 Network Insights uses Pi-hole's rolling in-memory reporting window (normally about 24 hours; retention and privacy settings can affect it). History is aligned into ten-minute buckets, with at most the latest 24 hours drawn. Missing buckets are not filled with invented zeros. Rankings combine matching client addresses or normalized domains before selecting the top five. Client names are labels, so unrelated devices with the same name are not merged. Tap/click a ranking row to reveal its full name and address. Counts are observed DNS requests, not deduplicated user activity; chained Pi-holes can observe the same request more than once.
 
-Up to 100 source entries per ranking and Pi-hole are combined. If this limit is reached, the ranking is explicitly marked partial. Pi-hole's own excluded-client/domain and privacy settings remain respected. Shares use the corresponding total queries or blocked queries, so the five visible rows need not add up to 100%. Missing instances and unavailable sections are labelled independently.
+Up to 100 source entries per ranking and Pi-hole are combined. Pi-Dash uses each truncated list's smallest count to bound omitted candidates. It shows "Approximate ranking · counts near the cut-off" only when those bounds cannot confirm the combined top five. A single reporting Pi-hole never triggers this warning. A `≥` before a count means that item was omitted from another truncated source and its combined count may be higher. "Partial data" means some Pi-holes did not report or hid their data. Pi-hole's own excluded-client/domain and privacy settings remain respected. Shares use the corresponding total queries or blocked queries, so the five visible rows need not add up to 100%. Missing instances and unavailable sections are labelled independently.
 
 Device metrics and network insights load independently of the fast DNS counters, normally refresh every 30 seconds per browser, and share a separate 30-second server cache. Waiting tabs retry a refresh-in-progress response after two seconds. Mobile requests optional data only while the relevant section is expanded. All polling pauses while the page is hidden or offline. An unavailable sensor or unsupported API does not mark a working DNS server offline; its reading displays Unavailable. Healthy status dots pulse gently only while the latest DNS snapshot is fresh, and respect reduced-motion preferences.
 
@@ -152,6 +156,8 @@ When the query feed is enabled, it displays recent queries while the dashboard i
 ### 2. `manifest.json` (Optional)
 
 This optional file customizes the Progressive Web App name and colors. Pi-Dash bundles its own V2 transparent PNG icons, served from the dashboard's origin:
+
+Manifest lookup uses `PI_DASH_MANIFEST` when set, then a root-level `manifest.json` (`/app/manifest.json` in Docker), then the built-in `web/manifest.json`. Existing config and manifest volume mounts keep working. To customize the bundled manifest, copy `web/manifest.json` to the repository root and edit it; omit the optional manifest mount if you use the built-in default. An explicitly configured environment path must exist.
 
 ```json
 {
@@ -243,7 +249,7 @@ docker run -d \
 3. Start Pi-Dash:
 
    ```bash
-   python proxy.py
+   python -m pi_dash
    ```
 
 Open `http://localhost:5001` in your browser.
@@ -253,6 +259,19 @@ Open `http://localhost:5001` in your browser.
 `GET /health` reports whether the Pi-Dash application is running. It does not contact the configured Pi-hole instances.
 
 ## Development
+
+### Project layout
+
+```text
+pi_dash/       Flask routes (app.py), startup settings (config.py), Pi-hole
+               client (pihole.py), shared caches (cache.py), aggregation (aggregate.py)
+web/           HTML, service worker, built-in manifest, CSS, JavaScript and icons
+tests/         Backend, frontend and rendered-browser regressions
+scripts/       Screenshot capture and icon export helpers
+src/           Tailwind input; generated CSS goes to web/css/style.css
+```
+
+Public asset and API URLs are unchanged except for the renamed `/js/network-insights.js`. The production entrypoint is `pi_dash.app:app`. Keep Gunicorn at **one worker and four threads**: sessions, locks and caches are shared in-process, so extra workers would split caches and multiply Pi-hole logins and API seats.
 
 The automated tests use mocked Pi-hole responses and do not require a live Pi-hole:
 
@@ -297,7 +316,7 @@ The compact desktop view uses header client counts, text-only rankings, and a si
 
 Network insights are off when `show_network_insights` is omitted, including existing configurations. Device metrics remain on when `show_device_metrics` is omitted. Set either flag explicitly to change that behavior. `show_network_summary` still defaults to true and controls the original four summary counters; disabling it also disables insights and their API requests. Unique Domains is no longer displayed; Domains on Lists is retained.
 
-The V2 vector master is `icons/icon.svg`; `icons/favicon.svg` uses wider, square bars for small sizes. The SVG sources have no embedded raster artwork or blur filters; PNG and ICO exports retain transparent backgrounds. To regenerate them, run `npm ci`, `npx playwright install chromium`, and `npm run build:icons`. The 16px export uses pixel-aligned bars for legibility.
+The V2 vector master is `web/icons/icon.svg`; `web/icons/favicon.svg` uses wider, square bars for small sizes. The SVG sources have no embedded raster artwork or blur filters; PNG and ICO exports retain transparent backgrounds. To regenerate them, run `npm ci`, `npx playwright install chromium`, and `npm run build:icons`. The 16px export uses pixel-aligned bars for legibility.
 
 Optional refreshes use a nonblocking refresh lock: waiting tabs receive the previous snapshot or a loading response and retry after two seconds, rather than occupying web threads. Failed or malformed optional readings are cached for 30 seconds. A detected DNS recovery expires the old readings. The existing four Gunicorn threads are retained.
 
