@@ -85,6 +85,9 @@ jobs:
             pi-dash:test
           for attempt in {1..20}; do
             if curl --fail --silent http://127.0.0.1:5001/health; then
+              for path in / /manifest.json /sw.js; do
+                curl --fail --silent "http://127.0.0.1:5001$path" > /dev/null || exit 1
+              done
               exit 0
             fi
             sleep 1

@@ -10,14 +10,28 @@ DEFAULT_BLOCKING_TTL = 30000
 OPTIONAL_REFRESH_MS = 30000
 
 
-def _load_json(name):
-    with open(os.path.join(APP_ROOT, name), encoding='utf-8') as handle:
-        return json.load(handle)
+def _read_json(path, label):
+    try:
+        with open(path, encoding='utf-8') as handle:
+            return json.load(handle)
+    except FileNotFoundError as exc:
+        raise RuntimeError(f'{label} not found: {path}. Mount the file or set PI_DASH_{label.upper()}.') from exc
 
 
-config = _load_json('config.json')
-with open(os.path.join(WEB_ROOT, 'manifest.json'), encoding='utf-8') as handle:
-    manifest_data = json.load(handle)
+def load_config(root=APP_ROOT):
+    return _read_json(os.environ.get('PI_DASH_CONFIG') or os.path.join(root, 'config.json'), 'Config')
+
+
+def load_manifest(root=APP_ROOT):
+    path = os.environ.get('PI_DASH_MANIFEST')
+    if not path:
+        override = os.path.join(root, 'manifest.json')
+        path = override if os.path.isfile(override) else os.path.join(root, 'web', 'manifest.json')
+    return _read_json(path, 'Manifest')
+
+
+config = load_config()
+manifest_data = load_manifest()
 base_path_config = config.get('base_path', '/')
 url_prefix = base_path_config[:-1] if base_path_config != '/' and base_path_config.endswith('/') else base_path_config
 html_base = base_path_config if base_path_config.endswith('/') else base_path_config + '/'
