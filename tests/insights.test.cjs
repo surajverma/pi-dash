@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
-const insights = require('../js/insights.js');
-const read = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
+const insights = require('../web/js/network-insights.js');
+const read = name => fs.readFileSync(path.join(__dirname, '..', 'web', name), 'utf8');
 
 test('missing readings stay unavailable and real zero readings remain zero', () => {
   assert.equal(insights.deviceValues({}).temperature, 'Unavailable');
@@ -85,7 +85,7 @@ test('optional mobile data loads on expansion and late responses cannot survive 
     if (url==='insights') return Promise.resolve(result({history:{},clients:{},domains:{}}));
     throw new Error(url);
   };
-  for (const name of ['dashboard-core','insights','app']) w.eval(read(`js/${name}.js`));
+  for (const name of ['dashboard-core','network-insights','app']) w.eval(read(`js/${name}.js`));
   const settle=()=>new Promise(resolve=>w.setTimeout(resolve,0));
   try {
     await settle();

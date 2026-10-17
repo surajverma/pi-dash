@@ -10,12 +10,12 @@ http.createServer((req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (pathname.startsWith('/fixture/')) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(fs.readFileSync(path.join(root, 'index.html'), 'utf8').replace('{{ICON_URL}}', '/favicon.ico').replace('<head>', '<head><base href="/"><script src="tests/browser/mock.js"></script>'));
+    res.end(fs.readFileSync(path.join(root, 'web/index.html'), 'utf8').replace('{{ICON_URL}}', '/favicon.ico').replace('<head>', '<head><base href="/"><script src="tests/browser/mock.js"></script>'));
     return;
   }
   if (pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
   const relative = pathname === '/' ? '/tests/browser/index.html' : pathname.endsWith('/') ? pathname + 'index.html' : pathname;
-  const file = path.resolve(root, '.' + relative);
+  const file = path.resolve(/^\/(css|js|icons)\//.test(relative) ? path.join(root, 'web') : root, '.' + relative);
   // Only public assets and this synthetic test harness may be served.
   if (!file.startsWith(root + path.sep) || !/^\/(css|js|icons|tests\/browser)\//.test(relative)) { res.writeHead(404); res.end(); return; }
   fs.readFile(file, (error, data) => {

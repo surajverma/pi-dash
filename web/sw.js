@@ -5,7 +5,7 @@ const APP_SHELL = [
   '{{CACHE_URL}}css/dashboard.css',
   '{{CACHE_URL}}js/dashboard-core.js',
   '{{CACHE_URL}}js/theme.js',
-  '{{CACHE_URL}}js/insights.js',
+  '{{CACHE_URL}}js/network-insights.js',
   '{{CACHE_URL}}js/app.js',
   '{{CACHE_URL}}icons/icon-maskable-512.png',
   '{{CACHE_URL}}icons/icon.svg',

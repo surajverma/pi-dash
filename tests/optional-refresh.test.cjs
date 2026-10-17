@@ -1,6 +1,6 @@
 const test=require('node:test'), assert=require('node:assert/strict');
 const fs=require('node:fs'), path=require('node:path'), {JSDOM}=require('jsdom');
-const read=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
+const read=name=>fs.readFileSync(path.join(__dirname,'..','web',name),'utf8');
 function setup(offline=false) {
   const dom=new JSDOM(read('index.html').replace(/<script[\s\S]*?<\/script>/g,''),{url:'https://example.test',runScripts:'outside-only'}), w=dom.window;
   let hidden=false, count=0, healthy=!offline, next=0;
@@ -11,7 +11,7 @@ function setup(offline=false) {
   const config={refresh_interval:2000,show_network_summary:true,show_network_insights:false,show_device_metrics:true,piholes:[{name:'One'}]};
   const stats=()=>({One:healthy?{queries:{total:1},_pi_dash:{blocking:true}}:{error:'offline',_pi_dash:{health:'unreachable'}}});
   w.fetch=async url=>({ok:true,json:async()=>url==='init'?{config,data:stats(),summary:{instances:1}}:url.startsWith('data')?{stats:stats(),summary:{instances:1}}:url==='devices'?(++count===1&&!offline?{refreshing:true,updated_at:null}:{devices:{One:{cpu_percent:12}}}):{}});
-  for(const name of ['dashboard-core','insights','app'])w.eval(read('js/'+name+'.js'));
+  for(const name of ['dashboard-core','network-insights','app'])w.eval(read('js/'+name+'.js'));
   return {w,retries,intervals,settle:()=>new Promise(setImmediate),count:()=>count,
     hide(value){hidden=value;w.document.dispatchEvent(new w.Event('visibilitychange'));},recover(){healthy=true;},close(){dom.window.close();}};
 }

@@ -6,7 +6,7 @@ from threading import Event
 from unittest.mock import patch
 
 os.environ.setdefault('PIHOLE_PRIMARY_PASSWORD', 'test-secret')
-import proxy
+import pi_dash.app as proxy
 
 
 class ConfigCompatibilityTests(unittest.TestCase):

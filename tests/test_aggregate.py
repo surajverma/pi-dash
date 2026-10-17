@@ -6,11 +6,11 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from unittest.mock import patch
 
-import proxy
-from telemetry import combine_history, combine_rankings, device_view, RANK_LIMIT
+import pi_dash.app as proxy
+from pi_dash.aggregate import combine_history, combine_rankings, device_view, RANK_LIMIT
 
 
-class TelemetryTests(unittest.TestCase):
+class AggregateTests(unittest.TestCase):
     def test_device_units_and_nullable_readings(self):
         view = device_view({'system': {'system': {'cpu': {'%cpu': 180, 'nprocs': 4},
                             'memory': {'ram': {'%used': 38}}, 'uptime': 100}},
@@ -97,7 +97,7 @@ class OptionalRouteTests(unittest.TestCase):
         import pathlib
         import struct
         import xml.etree.ElementTree as ET
-        icons = pathlib.Path(proxy.APP_ROOT) / 'icons'
+        icons = pathlib.Path(proxy.WEB_ROOT) / 'icons'
         for name in ('icon.svg', 'favicon.svg'):
             svg = ET.parse(icons / name).getroot()
             self.assertEqual(svg.attrib['viewBox'], '0 0 512 512')
@@ -168,7 +168,7 @@ def read(path, *args, **kwargs):
         return io.StringIO(json.dumps({'base_path':'/dash/', 'piholes':[]}))
     return original(path, *args, **kwargs)
 builtins.open = read
-import proxy
+import pi_dash.app as proxy
 with proxy.app.test_client() as client:
     manifest = client.get('/dash/manifest.json').get_json()
     assert manifest['id'] == manifest['scope'] == manifest['start_url'] == '/dash/'

@@ -7,7 +7,7 @@ import concurrent.futures
 import threading
 import time
 from urllib.parse import urlparse
-from telemetry import RANK_LIMIT, device_view, combine_history, combine_rankings
+from .aggregate import RANK_LIMIT, device_view, combine_history, combine_rankings
 
 NO_PASSWORD = "NO_PASSWORD"
 DEFAULT_REFRESH_INTERVAL = 5000
@@ -22,7 +22,8 @@ BLOCKED_STATUSES = {
 }
 
 app = Flask(__name__)
-APP_ROOT = os.path.dirname(os.path.realpath(__file__))
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+WEB_ROOT = os.path.join(APP_ROOT, 'web')
 
 
 def _load_json(name):
@@ -31,10 +32,11 @@ def _load_json(name):
 
 
 config = _load_json('config.json')
-manifest_data = _load_json('manifest.json')
-with open(os.path.join(APP_ROOT, 'index.html'), encoding='utf-8') as handle:
+with open(os.path.join(WEB_ROOT, 'manifest.json'), encoding='utf-8') as handle:
+    manifest_data = json.load(handle)
+with open(os.path.join(WEB_ROOT, 'index.html'), encoding='utf-8') as handle:
     index_template = handle.read()
-with open(os.path.join(APP_ROOT, 'sw.js'), encoding='utf-8') as handle:
+with open(os.path.join(WEB_ROOT, 'sw.js'), encoding='utf-8') as handle:
     sw_template = handle.read()
 
 base_path_config = config.get('base_path', '/')
@@ -200,22 +202,22 @@ def serve_sw():
 
 @bp.route('/css/<path:path>')
 def send_css(path):
-    return send_from_directory(os.path.join(APP_ROOT, 'css'), path)
+    return send_from_directory(os.path.join(WEB_ROOT, 'css'), path)
 
 
 @bp.route('/js/<path:path>')
 def send_js(path):
-    return send_from_directory(os.path.join(APP_ROOT, 'js'), path)
+    return send_from_directory(os.path.join(WEB_ROOT, 'js'), path)
 
 
 @bp.route('/favicon.ico')
 def favicon():
-    return send_from_directory(os.path.join(APP_ROOT, 'icons'), 'favicon.ico')
+    return send_from_directory(os.path.join(WEB_ROOT, 'icons'), 'favicon.ico')
 
 
 @bp.route('/icons/<path:path>')
 def send_icon(path):
-    return send_from_directory(os.path.join(APP_ROOT, 'icons'), path)
+    return send_from_directory(os.path.join(WEB_ROOT, 'icons'), path)
 
 
 # -- API helpers --

@@ -3,7 +3,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from unittest.mock import patch
-import proxy
+import pi_dash.app as proxy
 
 
 class OptionalConcurrencyTests(unittest.TestCase):

@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../web');
 (async () => {
   const source = fs.readFileSync(path.join(root, 'icons/icon.svg'), 'utf8');
   const favicon = source.replace(/<g fill="#fff" id="bars">[\s\S]*?<\/g>/, '<g fill="#fff" id="bars"><rect x="176" y="256" width="48" height="48"/><rect x="240" y="208" width="48" height="96"/><rect x="304" y="240" width="48" height="64"/></g>');
