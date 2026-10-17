@@ -31,7 +31,8 @@ def device_view(parts):
     for item in parts.get('upstreams', {}).get('upstreams', []):
         response = number((item.get('statistics') or {}).get('response'))
         count = number(item.get('count'), 1)
-        if number(item.get('port'), 1) is not None and response is not None and count:
+        # Pi-hole uses zero response time when a mean is not applicable.
+        if number(item.get('port'), 1) is not None and response is not None and response > 0 and count:
             response_total += response * count
             response_weight += count
     return {

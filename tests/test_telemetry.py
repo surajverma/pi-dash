@@ -27,6 +27,7 @@ class TelemetryTests(unittest.TestCase):
         upstreams = [{'port': 53, 'count': 10, 'statistics': {'response': .01}},
                      {'port': 5353, 'count': 30, 'statistics': {'response': .03}},
                      {'port': -1, 'count': 900, 'statistics': {'response': 0}},
+                     {'port': 53, 'count': 50, 'statistics': {'response': 0}},
                      {'port': 53, 'count': 50, 'statistics': {'response': None}}]
         self.assertAlmostEqual(device_view({'upstreams': {'upstreams': upstreams}})['upstream_ms'], 25)
 
